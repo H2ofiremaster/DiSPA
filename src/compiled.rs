@@ -22,6 +22,19 @@ pub fn reset(object_name: &str, animation_name: &str, delay: u32) -> String {
     )
 }
 
-pub fn increment(object_name: &str, animation_name: &str, namespace: &str, path: &str) -> String {
+pub fn increment(object_name: &str, animation_name: &str) -> String {
+    format!("scoreboard players add ${object_name}-{animation_name} timer 1")
+}
+
+pub fn tick_function_line(
+    object_name: &str,
+    animation_name: &str,
+    namespace: &str,
+    path: &str,
+) -> String {
     format!("execute if score ${object_name}-{animation_name} flags matches 1.. run function {namespace}:{path}")
+}
+
+pub fn disclaimer() -> String {
+    "# File generated using DiSPA\n".to_string()
 }

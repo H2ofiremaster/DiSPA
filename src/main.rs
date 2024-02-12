@@ -1,11 +1,13 @@
 use std::{fmt::Display, fs, io::Write, path::PathBuf, str::FromStr};
 
 use anyhow::ensure;
+use errors::CompileError;
 use file_reader::parse_file;
 use walkdir::WalkDir;
 
 mod compiled;
 mod config;
+mod errors;
 mod file_reader;
 mod objects;
 
@@ -14,11 +16,15 @@ fn get_folder_tree(path: PathBuf) -> Vec<String> {
         .into_iter()
         .filter_map(|path| {
             if let Err(ref err) = path {
-                println!("Error reading path: {}", err);
+                println!("{}", CompileError::InvalidPath(err.to_string()))
             }
             path.ok()
         })
-        .filter(|path| path.path().extension().is_some_and(|e| e == "dspa"))
+        .filter(|path| {
+            path.path()
+                .extension()
+                .is_some_and(|e| e == DISPA_EXTENSION)
+        })
         .filter_map(|path| path.into_path().into_os_string().into_string().ok())
         .collect::<Vec<_>>()
 }
@@ -32,12 +38,12 @@ pub fn collect_errors<T, E: Display>(input: Vec<Result<T, E>>) -> anyhow::Result
             acc.push_str(&format!("{}: {}\n", err.0, err.1));
             acc
         });
-    ensure!(
-        errors.is_empty(),
-        "One or more item in the collection threw an error:\n {errors}"
-    );
+    ensure!(errors.is_empty(), CompileError::InvalidCollection(errors));
     Ok(input.into_iter().filter_map(|e| e.ok()).collect())
 }
+
+const DISPA_EXTENSION: &str = "dspa";
+const MINECRAFT_EXTENSION: &str = "mcfunction";
 
 fn main() -> anyhow::Result<()> {
     let config = config::read_config()?;
@@ -48,13 +54,13 @@ fn main() -> anyhow::Result<()> {
         let path: String = result
             .path
             .replace(&config.source_folder, &config.target_folder)
-            .replace("dspa", "mcfunction");
+            .replace(DISPA_EXTENSION, MINECRAFT_EXTENSION);
         fs::write(&path, result.contents)?;
         let filtered_path = path
             .replace('\\', "/")
             .strip_prefix("./")
             .unwrap_or(&path)
-            .replace(".mcfunction", "");
+            .replace(&format!(".{MINECRAFT_EXTENSION}"), "");
         let mut tick_function = fs::OpenOptions::new()
             .write(true)
             .append(true)
@@ -62,7 +68,7 @@ fn main() -> anyhow::Result<()> {
         writeln!(
             tick_function,
             "{}",
-            compiled::increment(
+            compiled::tick_function_line(
                 &result.object_name,
                 &result.animation_name,
                 &config.namespace,

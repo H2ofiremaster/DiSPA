@@ -3,19 +3,19 @@ use anyhow::{ensure, Result as AResult};
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs::read_to_string;
+use std::path::Path;
 
+use crate::errors::CompileError;
 use crate::objects::{Rotation, Scale, Transformation, Translation};
 use crate::{collect_errors, compiled};
 
 macro_rules! next_element {
     ($elements:expr, $statement:expr, $current:expr) => {
-        $elements.next().with_context(|| {
-            format!(
-                "Statement '{}' has too few elements: {}/7",
-                $statement.escape_default(),
-                $current,
-            )
-        })?
+        $elements.next().context(CompileError::TooFewElements(
+            $statement.clone(),
+            $current,
+            7,
+        ))?
     };
 }
 
@@ -70,12 +70,12 @@ pub struct CompiledFile {
 
 const COMMENT_PATTERN: &str = r"#.*?\n";
 pub fn parse_file(path: &str) -> AResult<CompiledFile> {
-    let comment_regex = Regex::new(COMMENT_PATTERN)
-        .with_context(|| format!("Pattern '{}' is not a valid regex", COMMENT_PATTERN))?;
+    let comment_regex =
+        Regex::new(COMMENT_PATTERN).context(CompileError::InvalidRegex(COMMENT_PATTERN))?;
 
-    let file_name = extract_name(path)?;
+    let file_name = extract_file_name(path)?;
 
-    let raw_code = read_to_string(path).context("Path does not lead to a valid file.")?;
+    let raw_code = read_to_string(path).context(CompileError::InvalidPath(path.to_string()))?;
     let filtered_code = comment_regex.replace_all(&raw_code, "");
 
     let statements: Vec<_> = filtered_code
@@ -84,19 +84,17 @@ pub fn parse_file(path: &str) -> AResult<CompiledFile> {
         .map(|s| s.trim().to_owned())
         .filter(|s| !s.is_empty())
         .collect();
-    ensure!(!statements.is_empty(), "File is empty.");
+    ensure!(!statements.is_empty(), CompileError::FileEmpty);
     let (object_name, animation_name, statements) = parse_names(statements, file_name)?;
     let flattened = collapse_blocks(statements)?;
     let mut compiled = compile_statements(flattened, &object_name, &animation_name)?;
-    compiled.push(format!(
-        "scoreboard players add ${object_name}-{animation_name} timer 1"
-    ));
+    compiled.push(compiled::increment(&object_name, &animation_name));
 
     Ok(CompiledFile {
         path: path.to_string(),
         object_name,
         animation_name,
-        contents: String::from("# File generated using DiSPA\n") + &compiled.join("\n"),
+        contents: compiled::disclaimer() + &compiled.join("\n"),
     })
 }
 
@@ -105,15 +103,14 @@ fn parse_names(
     statements: Vec<String>,
     file_name: String,
 ) -> AResult<(String, String, Vec<String>)> {
-    let name_regex = Regex::new(NAME_PATTERN)
-        .with_context(|| format!("Pattern '{}' is not a valid regex", COMMENT_PATTERN))?;
+    let name_regex = Regex::new(NAME_PATTERN).context(CompileError::InvalidRegex(NAME_PATTERN))?;
 
     let object_name = statements
         .iter()
         .find(|&statement| statement.starts_with("object"))
         .map(|s| {
             s.split_once(' ')
-                .context("Object name specified, but not provided.")
+                .context(CompileError::ObjectNotNamed)
                 .map(|r| r.1.to_string())
         });
     let object_name = match object_name {
@@ -124,7 +121,7 @@ fn parse_names(
 
     ensure!(
         name_regex.is_match(&object_name),
-        "Object name contains invalid characters."
+        CompileError::InvalidCharacters("Object name", object_name.clone()),
     );
 
     let animation_name = statements
@@ -142,7 +139,7 @@ fn parse_names(
     };
     ensure!(
         name_regex.is_match(&animation_name),
-        "Animation name contains invalid characters."
+        CompileError::InvalidCharacters("Animation name", animation_name.clone())
     );
 
     Ok((
@@ -155,15 +152,11 @@ fn parse_names(
     ))
 }
 
-fn extract_name(path: &str) -> AResult<String> {
-    let mut split = path
-        .split(['\\', '/'])
-        .last()
-        .context("Path was empty.")?
-        .split('.')
-        .collect::<Vec<_>>();
-    split.pop();
-    Ok(split.join("."))
+fn extract_file_name(path: &str) -> AResult<String> {
+    let file_name = Path::new(path)
+        .file_stem()
+        .context(CompileError::InvalidPath(path.to_string()))?;
+    Ok(file_name.to_string_lossy().to_string())
 }
 
 fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<String>> {
@@ -172,32 +165,24 @@ fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<
         .into_iter()
         .map(|statement| {
             if statement.contains('{') {
-                let previous_block = blocks.last().context("Block queue is empty.")?;
+                let previous_block = blocks.last().context(CompileError::BlockQueueEmpty)?;
                 let (delay, duration) = parse_block_definition(&statement, previous_block)?;
                 blocks.push(Block { delay, duration });
                 return Ok(String::new());
-            } else if statement == "}" {
-                if blocks.len() > 1 {
-                    blocks.pop();
-                    return Ok(String::new());
-                } else {
-                    bail!("Unbalanced brackets: Too many closing brackets.")
-                }
+            }
+            if statement == "}" {
+                ensure!(blocks.len() > 1, CompileError::UnbalancedBrackets);
+                blocks.pop();
+                return Ok(String::new());
             }
 
-            let current_block = blocks.last().context("Block queue is empty.")?;
-            let keyword = get_keyword(&statement).with_context(|| {
-                format!(
-                    "Statement '{}' doesn't contain a keyword.",
-                    statement.escape_default()
-                )
-            })?;
-            let statement_start = statement.split_inclusive(keyword).next().with_context(|| {
-                format!(
-                    "Statement '{}' doesn't contain a keyword.",
-                    statement.escape_default()
-                )
-            })?;
+            let current_block = blocks.last().context(CompileError::BlockQueueEmpty)?;
+            let keyword =
+                get_keyword(&statement).context(CompileError::NoKeyword(statement.clone()))?;
+            let statement_start = statement
+                .split_inclusive(keyword)
+                .next()
+                .context(CompileError::NoKeyword(statement.clone()))?;
             let mut statement = statement.clone();
             if !statement_start.contains("_d") {
                 statement = format!("{}_d {}", current_block.duration, statement);
@@ -220,15 +205,18 @@ fn parse_block_definition(definition: &str, previous_block: &Block) -> AResult<(
         .map(Number::try_from)
         .collect();
     let numbers = collect_errors(numbers)?;
-    if numbers.len() > 2 {
-        bail!("Too many numbers in block definition: {:?}", numbers)
-    }
+    ensure!(
+        numbers.len() < 2,
+        CompileError::BlockTooManyNumbers(definition.to_string())
+    );
     let (first, second) = (
-        numbers.get(0).context("Block definition is empty.")?,
+        numbers
+            .get(0)
+            .context(CompileError::BlockNoNumbers(definition.to_string()))?,
         numbers.get(1),
     );
     if second.is_some_and(|second| second.number_type == first.number_type) {
-        bail!("Block definition contains two numbers of the same type.")
+        bail!(CompileError::BlockDuplicateNumbers(definition.to_string()))
     }
     Ok(numbers.iter().fold(
         (previous_block.delay, previous_block.duration),
@@ -256,7 +244,6 @@ fn compile_statements(
             let (delay, duration) = order_numbers(numbers)?;
             let keyword = next_element!(elements, statement, 2);
             if keyword == "end" {
-                println!("Delay: {delay}, Duration: {duration}");
                 return Ok(compiled::reset(object_name, animation_name, delay));
             }
             let entity_name = next_element!(elements, statement, 3).to_owned();
@@ -314,10 +301,7 @@ fn compile_statements(
                     entities.insert(entity_name.clone(), entity.with_scale(scale));
                     scale.to_string()
                 }
-                _ => bail!(
-                    "Statement '{}' has an invalid keyword.",
-                    statement.escape_default()
-                ),
+                _ => bail!(CompileError::InvalidKeyword(statement.clone())),
             };
             Ok(compiled::transformation(
                 object_name,
@@ -370,19 +354,11 @@ fn parse_coordinate(coordinate: &str, current: f32) -> AResult<f32> {
             .replace("~-", "-0")
             .replace('~', "0")
             .parse::<f32>()
-            .with_context(|| {
-                format!(
-                    "Could not parse coordinate '{}'.",
-                    coordinate.escape_default()
-                )
-            })?
+            .map_err(|err| CompileError::InvalidCoordinate(coordinate.clone(), err))?
             + current)
     } else {
-        coordinate.parse::<f32>().with_context(|| {
-            format!(
-                "Could not parse coordinate '{}'.",
-                coordinate.escape_default()
-            )
-        })
+        coordinate
+            .parse::<f32>()
+            .map_err(|err| CompileError::InvalidCoordinate(coordinate.clone(), err).into())
     }
 }
