@@ -274,7 +274,7 @@ execute if score ${object_name}-{animation_name} timer matches {delay}.. run sco
                 }
             };
             let transformation = match keyword {
-                "move" => {
+                "move" | "translate" | "m" => {
                     let translation = Translation {
                         x: parse_coordinate(
                             next_element!(elements, statement, 4),
@@ -292,7 +292,7 @@ execute if score ${object_name}-{animation_name} timer matches {delay}.. run sco
                     entities.insert(entity_name.clone(), entity.with_translation(translation));
                     translation.to_string()
                 }
-                "rot" => {
+                "turn" | "rotatie" | "r" => {
                     let rotation = Rotation {
                         yaw: parse_coordinate(
                             next_element!(elements, statement, 4),
@@ -310,7 +310,7 @@ execute if score ${object_name}-{animation_name} timer matches {delay}.. run sco
                     entities.insert(entity_name.clone(), entity.with_rotation(rotation));
                     rotation.to_string()
                 }
-                "size" => {
+                "size" | "scale" | "s" => {
                     let scale = Scale {
                         x: parse_coordinate(next_element!(elements, statement, 4), entity.scale.x)?,
                         y: parse_coordinate(next_element!(elements, statement, 5), entity.scale.y)?,
@@ -352,7 +352,18 @@ fn order_numbers(numbers: (Number, Number)) -> AResult<(u32, u32)> {
     ))
 }
 
-const KEYWORDS: [&str; 4] = ["move", "rot", "size", "end"];
+const KEYWORDS: &[&str] = &[
+    "move",
+    "translate",
+    "m",
+    "turn",
+    "rotate",
+    "r",
+    "size",
+    "scale",
+    "s",
+    "end",
+];
 fn get_keyword(input: &str) -> Option<&str> {
     KEYWORDS.iter().find(|&&k| input.contains(k)).copied()
 }
