@@ -1,0 +1,23 @@
+object dtest;
+0_t 20_d move e1 0 1 0;
+# _t is delay, _d is duration.
+10_t {
+    20_d move e1 ~ ~1 ~;
+    20_d rot e1 90 0 0;
+}
+20_d {
+    20_t move e1 1 0 0; # This is a comment, by the way.
+    20_t rot e1 0 90 0;
+
+}
+
+30_t 20_d {
+    move e1 ~1 ~ ~;
+    10_d {
+        move e1 ~ ~ ~1;
+        rot e1 ~90 ~ ~;
+        100_d size e1 2 2 2;
+    }
+    size e1 2 2 2;
+}
+100_t end;

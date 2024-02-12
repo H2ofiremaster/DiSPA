@@ -1,0 +1,6 @@
+{
+    "source_folder": "./test/src",
+    "target_folder": "./test/objects",
+    "tick_function": "./test/tick.mcfunction",
+    "namespace": "de"
+}
