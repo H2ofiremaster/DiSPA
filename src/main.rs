@@ -4,6 +4,7 @@ use anyhow::ensure;
 use file_reader::parse_file;
 use walkdir::WalkDir;
 
+mod compiled;
 mod config;
 mod file_reader;
 mod objects;
@@ -49,20 +50,24 @@ fn main() -> anyhow::Result<()> {
             .replace(&config.source_folder, &config.target_folder)
             .replace("dspa", "mcfunction");
         fs::write(&path, result.contents)?;
+        let filtered_path = path
+            .replace('\\', "/")
+            .strip_prefix("./")
+            .unwrap_or(&path)
+            .replace(".mcfunction", "");
         let mut tick_function = fs::OpenOptions::new()
             .write(true)
             .append(true)
             .open(&config.tick_function)?;
         writeln!(
             tick_function,
-            "execute if score ${}-{} flags matches 1.. run function {}:{}",
-            result.object_name,
-            result.animation_name,
-            config.namespace,
-            path.replace('\\', "/")
-                .strip_prefix("./")
-                .unwrap_or(&path)
-                .replace(".mcfunction", "")
+            "{}",
+            compiled::increment(
+                &result.object_name,
+                &result.animation_name,
+                &config.namespace,
+                &filtered_path
+            ),
         )?;
     }
     Ok(())

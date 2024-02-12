@@ -4,8 +4,8 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::fs::read_to_string;
 
-use crate::collect_errors;
 use crate::objects::{Rotation, Scale, Transformation, Translation};
+use crate::{collect_errors, compiled};
 
 macro_rules! next_element {
     ($elements:expr, $statement:expr, $current:expr) => {
@@ -257,12 +257,7 @@ fn compile_statements(
             let keyword = next_element!(elements, statement, 2);
             if keyword == "end" {
                 println!("Delay: {delay}, Duration: {duration}");
-                return Ok(format!(
-r#"
-execute if score ${object_name}-{animation_name} timer matches {delay}.. run scoreboard players set ${object_name}-{animation_name} flags 0
-execute if score ${object_name}-{animation_name} timer matches {delay}.. run scoreboard players set ${object_name}-{animation_name} timer -1
-"#
-                ));
+                return Ok(compiled::reset(object_name, animation_name, delay));
             }
             let entity_name = next_element!(elements, statement, 3).to_owned();
             let entity = entities.get(&entity_name);
@@ -324,13 +319,13 @@ execute if score ${object_name}-{animation_name} timer matches {delay}.. run sco
                     statement.escape_default()
                 ),
             };
-            Ok(compile(
+            Ok(compiled::transformation(
                 object_name,
                 animation_name,
                 &entity_name,
                 delay,
                 duration,
-                transformation,
+                &transformation,
             ))
         })
         .collect();
@@ -390,19 +385,4 @@ fn parse_coordinate(coordinate: &str, current: f32) -> AResult<f32> {
             )
         })
     }
-}
-
-fn compile(
-    object_name: &str,
-    animation_name: &str,
-    target_name: &str,
-    delay: u32,
-    duration: u32,
-    transformation: String,
-) -> String {
-    format!(
-        "execute as @e[tag={object_name}-{target_name}] \
-        if score ${object_name}-{animation_name} timer matches {delay} run \
-        data merge entity @s {{start_interpolation:0,interpolation_duration:{duration},transformation: {{{transformation}}}}}"
-    )
 }
