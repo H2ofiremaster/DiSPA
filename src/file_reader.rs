@@ -76,16 +76,16 @@ pub fn parse_file(path: &str) -> AResult<CompiledFile> {
     let file_name = extract_file_name(path)?;
 
     let raw_code = read_to_string(path).context(CompileError::InvalidPath(path.to_string()))?;
-    let filtered_code = comment_regex.replace_all(&raw_code, "");
+    let commentless_code = comment_regex.replace_all(&raw_code, "");
 
-    let statements: Vec<_> = filtered_code
+    let statements: Vec<_> = commentless_code
         .split(';')
         .flat_map(|s| s.split_inclusive(&['{', '}']))
-        .map(|s| s.trim().to_owned())
+        .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect();
     ensure!(!statements.is_empty(), CompileError::FileEmpty);
-    let (object_name, animation_name, statements) = parse_names(statements, file_name)?;
+    let (object_name, animation_name, statements) = parse_names(statements, &file_name)?;
     let flattened = collapse_blocks(statements)?;
     let mut compiled = compile_statements(flattened, &object_name, &animation_name)?;
     compiled.push(compiled::increment(&object_name, &animation_name));
@@ -99,44 +99,16 @@ pub fn parse_file(path: &str) -> AResult<CompiledFile> {
 }
 
 const NAME_PATTERN: &str = r"^[A-Za-z0-9_\-]*$";
-fn parse_names(
-    statements: Vec<String>,
-    file_name: String,
-) -> AResult<(String, String, Vec<String>)> {
+fn parse_names(statements: Vec<String>, file_name: &str) -> AResult<(String, String, Vec<String>)> {
     let name_regex = Regex::new(NAME_PATTERN).context(CompileError::InvalidRegex(NAME_PATTERN))?;
 
-    let object_name = statements
-        .iter()
-        .find(|&statement| statement.starts_with("object"))
-        .map(|s| {
-            s.split_once(' ')
-                .context(CompileError::ObjectNotNamed)
-                .map(|r| r.1.to_string())
-        });
-    let object_name = match object_name {
-        Some(Ok(value)) => value,
-        Some(Err(e)) => return Err(e),
-        None => file_name,
-    };
-
+    let object_name = find_statement(&statements, "object", file_name)?;
     ensure!(
         name_regex.is_match(&object_name),
         CompileError::InvalidCharacters("Object name", object_name.clone()),
     );
 
-    let animation_name = statements
-        .iter()
-        .find(|&statement| statement.starts_with("anim"))
-        .map(|s| {
-            s.split_once(' ')
-                .context("Animation name specified, but not provided.")
-                .map(|r| r.1.to_string())
-        });
-    let animation_name = match animation_name {
-        Some(Ok(value)) => value,
-        Some(Err(e)) => return Err(e),
-        None => object_name.clone(),
-    };
+    let animation_name = find_statement(&statements, "anim", &object_name)?;
     ensure!(
         name_regex.is_match(&animation_name),
         CompileError::InvalidCharacters("Animation name", animation_name.clone())
@@ -150,6 +122,19 @@ fn parse_names(
             .filter(|s| !s.starts_with("object") && !s.starts_with("anim"))
             .collect(),
     ))
+}
+
+fn find_statement(statements: &[String], prefix: &str, default: &str) -> AResult<String> {
+    Ok(statements
+        .iter()
+        .find(|&statement| statement.starts_with(prefix))
+        .map(|s| {
+            s.split_once(' ')
+                .context(CompileError::NotNamed(prefix.to_string()))
+                .map(|r| r.1.to_string())
+        })
+        .transpose()?
+        .unwrap_or(default.to_string()))
 }
 
 fn extract_file_name(path: &str) -> AResult<String> {
@@ -246,7 +231,7 @@ fn compile_statements(
             if keyword == "end" {
                 return Ok(compiled::reset(object_name, animation_name, delay));
             }
-            let entity_name = next_element!(elements, statement, 3).to_owned();
+            let entity_name = next_element!(elements, statement, 3).to_string();
             let entity = entities.get(&entity_name);
             let entity = match entity {
                 Some(entity) => entity,
@@ -348,7 +333,7 @@ fn get_keyword(input: &str) -> Option<&str> {
 }
 
 fn parse_coordinate(coordinate: &str, current: f32) -> AResult<f32> {
-    let coordinate = coordinate.to_owned();
+    let coordinate = coordinate.to_string();
     if coordinate.starts_with('~') {
         Ok(coordinate
             .replace("~-", "-0")

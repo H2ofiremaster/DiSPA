@@ -8,8 +8,8 @@ pub enum CompileError {
     InvalidPath(String),
     #[error("Pattern '{0}' is not a valid regex.")]
     InvalidRegex(&'static str),
-    #[error("Object specified, but no name was provided.")]
-    ObjectNotNamed,
+    #[error("Keyword '{0}' specified, but no name was provided.")]
+    NotNamed(String),
     #[error("{0} '{1}' contains invalid characters.")]
     InvalidCharacters(&'static str, String),
     #[error("Unbalanced brackets.")]
