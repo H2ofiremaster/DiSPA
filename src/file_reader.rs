@@ -7,7 +7,7 @@ use std::fs::read_to_string;
 use std::path::Path;
 use std::str::FromStr;
 
-use crate::errors::CompileError;
+use crate::errors::{CompileError, NumberSetError};
 use crate::objects::Transformation;
 use crate::{collect_errors, compiled};
 
@@ -19,12 +19,6 @@ macro_rules! next_element {
             7,
         ))?
     };
-}
-
-#[derive(Debug, Default)]
-struct Block {
-    delay: u32,
-    duration: u32,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -69,6 +63,59 @@ impl FromStr for Number {
         })?)?;
         let value: u32 = split.0.parse()?;
         Ok(Number { number_type, value })
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct NumberSet {
+    delay: u32,
+    duration: u32,
+}
+impl NumberSet {
+    fn new(delay: u32, duration: u32) -> Self {
+        Self { delay, duration }
+    }
+
+    fn from_vec_with_fallback(
+        vec: Vec<Number>,
+        fallback: NumberSet,
+    ) -> Result<Self, NumberSetError> {
+        match vec.len() {
+            1 => {
+                let number = vec[0];
+                let set = match number.number_type {
+                    NumberType::Delay => NumberSet::new(number.value, fallback.duration),
+                    NumberType::Duration => NumberSet::new(fallback.delay, number.value),
+                };
+                Ok(set)
+            }
+            2 => Self::try_from((vec[0], vec[1])),
+            3.. => Err(NumberSetError::TooMany(vec.len() as u32)),
+            _ => Err(NumberSetError::TooFew(0)),
+        }
+    }
+}
+impl TryFrom<(Number, Number)> for NumberSet {
+    type Error = NumberSetError;
+
+    fn try_from(value: (Number, Number)) -> Result<Self, Self::Error> {
+        let number_set = match (value.0.number_type, value.1.number_type) {
+            (NumberType::Delay, NumberType::Duration) => NumberSet {
+                delay: value.0.value,
+                duration: value.1.value,
+            },
+            (NumberType::Duration, NumberType::Delay) => NumberSet {
+                duration: value.0.value,
+                delay: value.1.value,
+            },
+            _ => return Err(NumberSetError::Duplicate(value.0.number_type)),
+        };
+        Ok(number_set)
+    }
+}
+impl From<(u32, u32)> for NumberSet {
+    fn from(value: (u32, u32)) -> Self {
+        NumberSet::new(value.0, value.1)
     }
 }
 
@@ -157,14 +204,15 @@ fn extract_file_name(path: &str) -> AResult<String> {
 }
 
 fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<String>> {
-    let mut blocks: Vec<Block> = vec![Block::default()];
+    let mut blocks: Vec<NumberSet> = vec![NumberSet::default()];
     let flattened: Vec<anyhow::Result<String>> = statements
         .into_iter()
         .map(|statement| {
             if statement.contains('{') {
                 let previous_block = blocks.last().context(CompileError::BlockQueueEmpty)?;
-                let (delay, duration) = parse_block_definition(&statement, previous_block)?;
-                blocks.push(Block { delay, duration });
+                let NumberSet { delay, duration } =
+                    parse_block_definition(&statement, *previous_block)?;
+                blocks.push(NumberSet { delay, duration });
                 return Ok(String::new());
             }
             if statement == "}" {
@@ -195,36 +243,17 @@ fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<
     collect_errors(flattened)
 }
 
-fn parse_block_definition(definition: &str, previous_block: &Block) -> AResult<(u32, u32)> {
+fn parse_block_definition(definition: &str, previous_block: NumberSet) -> AResult<NumberSet> {
     let numbers: Vec<AResult<Number>> = definition
         .split(' ')
         .filter(|&s| s != "{")
         .map(str::parse)
         .collect();
     let numbers = collect_errors(numbers)?;
-    ensure!(
-        numbers.len() < 2,
-        CompileError::BlockTooManyNumbers(definition.to_string())
-    );
-    let (first, second) = (
-        numbers
-            .get(0)
-            .context(CompileError::BlockNoNumbers(definition.to_string()))?,
-        numbers.get(1),
-    );
 
-    ensure!(
-        second.map_or(false, |second| second.number_type != first.number_type),
-        CompileError::BlockDuplicateNumbers(definition.to_string())
-    );
-
-    Ok(numbers.iter().fold(
-        (previous_block.delay, previous_block.duration),
-        |(delay, duration), number| match number.number_type {
-            NumberType::Delay => (number.value, duration),
-            NumberType::Duration => (delay, number.value),
-        },
-    ))
+    let number_set = NumberSet::from_vec_with_fallback(numbers, previous_block)
+        .map_err(|err| CompileError::InvalidBlockDefinition(definition.to_string(), err))?;
+    Ok(number_set)
 }
 
 fn compile_statements(
@@ -238,10 +267,11 @@ fn compile_statements(
         .map(|statement| {
             let mut elements = statement.split(' ');
 
-            let (delay, duration) = order_numbers(
-                next_element!(elements, statement, 0).parse()?,
-                next_element!(elements, statement, 1).parse()?,
-            )?;
+            let NumberSet { delay, duration } = (
+                next_element!(elements, statement, 0).parse::<Number>()?,
+                next_element!(elements, statement, 1).parse::<Number>()?,
+            )
+                .try_into()?;
             let keyword = next_element!(elements, statement, 2);
             if keyword == "end" {
                 return Ok(compiled::reset(object_name, animation_name, delay));
@@ -302,14 +332,6 @@ where
         .into();
     *entity = apply(entity, transformation);
     Ok(transformation.to_string())
-}
-
-fn order_numbers(first_number: Number, second_number: Number) -> AResult<(u32, u32)> {
-    match (first_number.number_type, second_number.number_type) {
-        (NumberType::Delay, NumberType::Duration) => Ok((first_number.value, second_number.value)),
-        (NumberType::Duration, NumberType::Delay) => Ok((second_number.value, first_number.value)),
-        _ => bail!(CompileError::DuplicateNumbers(first_number.number_type)),
-    }
 }
 
 const KEYWORDS: &[&str] = &[

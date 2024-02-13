@@ -20,18 +20,21 @@ pub enum CompileError {
     InvalidKeyword(String),
     #[error("The block queue is empty.")]
     BlockQueueEmpty,
-    #[error("The block definition '{0}' does not contain any numbers.")]
-    BlockNoNumbers(String),
-    #[error("The block definition '{0}' contains two numbers of the same type.")]
-    BlockDuplicateNumbers(String),
-    #[error("The block definition '{0}' contains too many numbers.")]
-    BlockTooManyNumbers(String),
+    #[error("Failed to parse block definition '{0}': {1}")]
+    InvalidBlockDefinition(String, #[source] NumberSetError),
     #[error("The statement '{0}' has too few elements: {1}/{2}.")]
     TooFewElements(String, u8, u8),
     #[error("Failed to parse coordinate: {0}.")]
     InvalidCoordinate(String, #[source] std::num::ParseFloatError),
     #[error("One or more item in the collection threw an error:\n {0}.")]
     InvalidCollection(String),
+}
+#[derive(Debug, Error)]
+pub enum NumberSetError {
     #[error("The numbers are both of type {0}.")]
-    DuplicateNumbers(crate::file_reader::NumberType),
+    Duplicate(crate::file_reader::NumberType),
+    #[error("Too many numbers: {0}/2")]
+    TooMany(u32),
+    #[error("Too few numbers: {0}/2")]
+    TooFew(u32),
 }
