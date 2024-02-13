@@ -2,17 +2,19 @@ use anyhow::{bail, Context};
 use anyhow::{ensure, Result as AResult};
 use regex::Regex;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::fs::read_to_string;
 use std::path::Path;
+use std::str::FromStr;
 
 use crate::errors::CompileError;
-use crate::objects::{Rotation, Scale, Transformation, Translation};
+use crate::objects::Transformation;
 use crate::{collect_errors, compiled};
 
 macro_rules! next_element {
     ($elements:expr, $statement:expr, $current:expr) => {
         $elements.next().context(CompileError::TooFewElements(
-            $statement.clone(),
+            $statement.to_string(),
             $current,
             7,
         ))?
@@ -26,7 +28,7 @@ struct Block {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum NumberType {
+pub enum NumberType {
     Delay,
     Duration,
 }
@@ -41,15 +43,24 @@ impl TryFrom<char> for NumberType {
         }
     }
 }
+impl Display for NumberType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NumberType::Delay => write!(f, "Delay"),
+            NumberType::Duration => write!(f, "Duration"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct Number {
     number_type: NumberType,
     value: u32,
 }
-impl TryFrom<&str> for Number {
-    type Error = anyhow::Error;
+impl FromStr for Number {
+    type Err = anyhow::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         let split = value.split_once('_').with_context(|| {
             format!("Number {value} did not contain type discriminator: No underscore.")
         })?;
@@ -125,7 +136,7 @@ fn parse_names(statements: Vec<String>, file_name: &str) -> AResult<(String, Str
 }
 
 fn find_statement(statements: &[String], prefix: &str, default: &str) -> AResult<String> {
-    Ok(statements
+    let statement = statements
         .iter()
         .find(|&statement| statement.starts_with(prefix))
         .map(|s| {
@@ -134,7 +145,8 @@ fn find_statement(statements: &[String], prefix: &str, default: &str) -> AResult
                 .map(|r| r.1.to_string())
         })
         .transpose()?
-        .unwrap_or(default.to_string()))
+        .unwrap_or(default.to_string());
+    Ok(statement)
 }
 
 fn extract_file_name(path: &str) -> AResult<String> {
@@ -187,7 +199,7 @@ fn parse_block_definition(definition: &str, previous_block: &Block) -> AResult<(
     let numbers: Vec<AResult<Number>> = definition
         .split(' ')
         .filter(|&s| s != "{")
-        .map(Number::try_from)
+        .map(str::parse)
         .collect();
     let numbers = collect_errors(numbers)?;
     ensure!(
@@ -200,9 +212,12 @@ fn parse_block_definition(definition: &str, previous_block: &Block) -> AResult<(
             .context(CompileError::BlockNoNumbers(definition.to_string()))?,
         numbers.get(1),
     );
-    if second.is_some_and(|second| second.number_type == first.number_type) {
-        bail!(CompileError::BlockDuplicateNumbers(definition.to_string()))
-    }
+
+    ensure!(
+        second.map_or(false, |second| second.number_type != first.number_type),
+        CompileError::BlockDuplicateNumbers(definition.to_string())
+    );
+
     Ok(numbers.iter().fold(
         (previous_block.delay, previous_block.duration),
         |(delay, duration), number| match number.number_type {
@@ -222,70 +237,38 @@ fn compile_statements(
         .into_iter()
         .map(|statement| {
             let mut elements = statement.split(' ');
-            let numbers: (Number, Number) = (
-                next_element!(elements, statement, 0).try_into()?,
-                next_element!(elements, statement, 1).try_into()?,
-            );
-            let (delay, duration) = order_numbers(numbers)?;
+
+            let (delay, duration) = order_numbers(
+                next_element!(elements, statement, 0).parse()?,
+                next_element!(elements, statement, 1).parse()?,
+            )?;
             let keyword = next_element!(elements, statement, 2);
             if keyword == "end" {
                 return Ok(compiled::reset(object_name, animation_name, delay));
             }
             let entity_name = next_element!(elements, statement, 3).to_string();
-            let entity = entities.get(&entity_name);
-            let entity = match entity {
-                Some(entity) => entity,
-                None => {
-                    entities.insert(entity_name.clone(), Transformation::default());
-                    entities.get(&entity_name).unwrap()
-                }
-            };
+            let entity = entities.entry(entity_name.clone()).or_default();
+
             let transformation = match keyword {
-                "move" | "translate" | "m" => {
-                    let translation = Translation {
-                        x: parse_coordinate(
-                            next_element!(elements, statement, 4),
-                            entity.translation.x,
-                        )?,
-                        y: parse_coordinate(
-                            next_element!(elements, statement, 5),
-                            entity.translation.y,
-                        )?,
-                        z: parse_coordinate(
-                            next_element!(elements, statement, 6),
-                            entity.translation.z,
-                        )?,
-                    };
-                    entities.insert(entity_name.clone(), entity.with_translation(translation));
-                    translation.to_string()
-                }
-                "turn" | "rotatie" | "r" => {
-                    let rotation = Rotation {
-                        yaw: parse_coordinate(
-                            next_element!(elements, statement, 4),
-                            entity.rotation.yaw,
-                        )?,
-                        pitch: parse_coordinate(
-                            next_element!(elements, statement, 5),
-                            entity.rotation.pitch,
-                        )?,
-                        roll: parse_coordinate(
-                            next_element!(elements, statement, 6),
-                            entity.rotation.roll,
-                        )?,
-                    };
-                    entities.insert(entity_name.clone(), entity.with_rotation(rotation));
-                    rotation.to_string()
-                }
-                "size" | "scale" | "s" => {
-                    let scale = Scale {
-                        x: parse_coordinate(next_element!(elements, statement, 4), entity.scale.x)?,
-                        y: parse_coordinate(next_element!(elements, statement, 5), entity.scale.y)?,
-                        z: parse_coordinate(next_element!(elements, statement, 6), entity.scale.z)?,
-                    };
-                    entities.insert(entity_name.clone(), entity.with_scale(scale));
-                    scale.to_string()
-                }
+                "move" | "translate" | "m" => parse_transformation(
+                    elements,
+                    &statement,
+                    entity,
+                    Transformation::with_translation,
+                )?,
+                "turn" | "rotate" | "r" => parse_transformation(
+                    elements,
+                    &statement,
+                    entity,
+                    Transformation::with_rotation,
+                )?,
+                "size" | "scale" | "s" => parse_transformation(
+                    elements,
+                    &statement,
+                    entity,
+                    Transformation::with_scale,
+                    /* (padding so rustfmt will format this like the others) */
+                )?,
                 _ => bail!(CompileError::InvalidKeyword(statement.clone())),
             };
             Ok(compiled::transformation(
@@ -301,19 +284,32 @@ fn compile_statements(
     collect_errors(compiled)
 }
 
-fn order_numbers(numbers: (Number, Number)) -> AResult<(u32, u32)> {
-    Ok((
-        match (numbers.0.number_type, numbers.1.number_type) {
-            (NumberType::Delay, _) => numbers.0.value,
-            (_, NumberType::Delay) => numbers.1.value,
-            _ => bail!("Statement does not contain Delay."),
-        },
-        match (numbers.0.number_type, numbers.1.number_type) {
-            (NumberType::Duration, _) => numbers.0.value,
-            (_, NumberType::Duration) => numbers.1.value,
-            _ => bail!("Statement does not contain Duration."),
-        },
-    ))
+fn parse_transformation<'a, T, F>(
+    mut elements: impl Iterator<Item = &'a str>,
+    statement: &str,
+    entity: &mut Transformation,
+    apply: F,
+) -> AResult<String>
+where
+    T: ToString + From<(f32, f32, f32)> + Copy,
+    F: FnOnce(&Transformation, T) -> Transformation,
+{
+    let transformation: T = (
+        parse_coordinate(next_element!(elements, statement, 4), entity.translation.x)?,
+        parse_coordinate(next_element!(elements, statement, 5), entity.translation.y)?,
+        parse_coordinate(next_element!(elements, statement, 6), entity.translation.z)?,
+    )
+        .into();
+    *entity = apply(entity, transformation);
+    Ok(transformation.to_string())
+}
+
+fn order_numbers(first_number: Number, second_number: Number) -> AResult<(u32, u32)> {
+    match (first_number.number_type, second_number.number_type) {
+        (NumberType::Delay, NumberType::Duration) => Ok((first_number.value, second_number.value)),
+        (NumberType::Duration, NumberType::Delay) => Ok((second_number.value, first_number.value)),
+        _ => bail!(CompileError::DuplicateNumbers(first_number.number_type)),
+    }
 }
 
 const KEYWORDS: &[&str] = &[

@@ -11,6 +11,16 @@ impl ToString for Translation {
         format!("translation: [{}f,{}f,{}f]", self.x, self.y, self.z)
     }
 }
+impl From<(f32, f32, f32)> for Translation {
+    fn from(value: (f32, f32, f32)) -> Self {
+        Translation {
+            x: value.0,
+            y: value.1,
+            z: value.2,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Rotation {
     pub yaw: f32,
@@ -34,6 +44,15 @@ impl ToString for Rotation {
         )
     }
 }
+impl From<(f32, f32, f32)> for Rotation {
+    fn from(value: (f32, f32, f32)) -> Self {
+        Rotation {
+            yaw: value.0,
+            pitch: value.1,
+            roll: value.2,
+        }
+    }
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Scale {
@@ -46,6 +65,16 @@ impl ToString for Scale {
         format!("scale: [{}f,{}f,{}f]", self.x, self.y, self.z)
     }
 }
+impl From<(f32, f32, f32)> for Scale {
+    fn from(value: (f32, f32, f32)) -> Self {
+        Scale {
+            x: value.0,
+            y: value.1,
+            z: value.2,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Transformation {
     pub translation: Translation,

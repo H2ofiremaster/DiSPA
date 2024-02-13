@@ -26,10 +26,12 @@ pub enum CompileError {
     BlockDuplicateNumbers(String),
     #[error("The block definition '{0}' contains too many numbers.")]
     BlockTooManyNumbers(String),
-    #[error("The statement '{0}' has too few elements: {1}/{2}")]
+    #[error("The statement '{0}' has too few elements: {1}/{2}.")]
     TooFewElements(String, u8, u8),
-    #[error("Failed to parse coordinate: {0}")]
+    #[error("Failed to parse coordinate: {0}.")]
     InvalidCoordinate(String, #[source] std::num::ParseFloatError),
-    #[error("One or more item in the collection threw an error:\n {0}")]
+    #[error("One or more item in the collection threw an error:\n {0}.")]
     InvalidCollection(String),
+    #[error("The numbers are both of type {0}.")]
+    DuplicateNumbers(crate::file_reader::NumberType),
 }
