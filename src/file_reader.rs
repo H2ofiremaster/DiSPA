@@ -26,13 +26,17 @@ pub enum NumberType {
     Delay,
     Duration,
 }
+impl NumberType {
+    const DELAY_PREFIX: char = '@';
+    const DURATION_PREFIX: char = '%';
+}
 impl TryFrom<char> for NumberType {
     type Error = anyhow::Error;
 
     fn try_from(value: char) -> Result<Self, Self::Error> {
         match value {
-            't' => Ok(Self::Delay),
-            'd' => Ok(Self::Duration),
+            Self::DELAY_PREFIX => Ok(Self::Delay),
+            Self::DURATION_PREFIX => Ok(Self::Duration),
             _ => bail!("Char '{value}' does not correspond to a NumberType."),
         }
     }
@@ -55,13 +59,15 @@ impl FromStr for Number {
     type Err = anyhow::Error;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let split = value.split_once('_').with_context(|| {
-            format!("Number {value} did not contain type discriminator: No underscore.")
-        })?;
-        let number_type = NumberType::try_from(split.1.chars().next().with_context(|| {
-            format!("Number {value} did not contain type discriminator: No discriminator.")
-        })?)?;
-        let value: u32 = split.0.parse()?;
+        let mut value = value.to_string();
+
+        let number_type = value
+            .remove(0)
+            .try_into()
+            .context(CompileError::InvalidDiscriminator(value.clone()))?;
+        let value: u32 = value
+            .parse()
+            .map_err(|err| CompileError::InvalidNumber(value.clone(), err))?;
         Ok(Number { number_type, value })
     }
 }
@@ -210,9 +216,7 @@ fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<
         .map(|statement| {
             if statement.contains('{') {
                 let previous_block = blocks.last().context(CompileError::BlockQueueEmpty)?;
-                let NumberSet { delay, duration } =
-                    parse_block_definition(&statement, *previous_block)?;
-                blocks.push(NumberSet { delay, duration });
+                blocks.push(parse_block_definition(&statement, *previous_block)?);
                 return Ok(String::new());
             }
             if statement == "}" {
@@ -222,6 +226,7 @@ fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<
             }
 
             let current_block = blocks.last().context(CompileError::BlockQueueEmpty)?;
+            println!("Current Block: {current_block:?}");
             let keyword =
                 get_keyword(&statement).context(CompileError::NoKeyword(statement.clone()))?;
             let statement_start = statement
@@ -229,13 +234,30 @@ fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<
                 .next()
                 .context(CompileError::NoKeyword(statement.clone()))?;
             let mut statement = statement.clone();
-            if !statement_start.contains("_d") {
-                statement = format!("{}_d {}", current_block.duration, statement);
+            println!("Statement: {statement}");
+            if !statement_start.contains(NumberType::DELAY_PREFIX) {
+                println!(
+                    "{statement_start} does not contain {}",
+                    NumberType::DELAY_PREFIX
+                );
+                statement = format!(
+                    "{}{} {statement}",
+                    NumberType::DELAY_PREFIX,
+                    current_block.delay,
+                );
             }
-            if !statement_start.contains("_t") {
-                statement = format!("{}_t {}", current_block.delay, statement);
+            if !statement_start.contains(NumberType::DURATION_PREFIX) {
+                println!(
+                    "{statement_start} does not contain {}",
+                    NumberType::DURATION_PREFIX
+                );
+                statement = format!(
+                    "{}{} {statement}",
+                    NumberType::DURATION_PREFIX,
+                    current_block.duration,
+                );
             }
-
+            println!("Statement: {statement}\n---");
             Ok(statement)
         })
         .filter(|statement| !matches!(statement, Ok(statement) if statement.is_empty()))

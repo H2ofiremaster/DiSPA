@@ -28,6 +28,10 @@ pub enum CompileError {
     InvalidCoordinate(String, #[source] std::num::ParseFloatError),
     #[error("One or more item in the collection threw an error:\n {0}.")]
     InvalidCollection(String),
+    #[error("Number '{0}' did not contain a discriminator.")]
+    InvalidDiscriminator(String),
+    #[error("Number '{0}' is not a valid number: {1}")]
+    InvalidNumber(String, #[source] std::num::ParseIntError),
 }
 #[derive(Debug, Error)]
 pub enum NumberSetError {
