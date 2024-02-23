@@ -1,5 +1,7 @@
 object dtest;
+anim atest;
 # @ is delay, % is duration.
+# This is a comment, by the way.
 
 @0 %20 move e1 0 1 0;
 @10 {
@@ -7,9 +9,8 @@ object dtest;
     %22 turn e1 90 0 0;
 }
 @20 {
-    %23 move e1 1 0 0; # This is a comment, by the way.
+    %23 move e1 1 0 0; 
     %24 turn e1 0 90 0;
-
 }
 
 @30 %20 {

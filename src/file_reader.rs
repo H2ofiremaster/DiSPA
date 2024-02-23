@@ -226,7 +226,6 @@ fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<
             }
 
             let current_block = blocks.last().context(CompileError::BlockQueueEmpty)?;
-            println!("Current Block: {current_block:?}");
             let keyword =
                 get_keyword(&statement).context(CompileError::NoKeyword(statement.clone()))?;
             let statement_start = statement
@@ -234,12 +233,7 @@ fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<
                 .next()
                 .context(CompileError::NoKeyword(statement.clone()))?;
             let mut statement = statement.clone();
-            println!("Statement: {statement}");
             if !statement_start.contains(NumberType::DELAY_PREFIX) {
-                println!(
-                    "{statement_start} does not contain {}",
-                    NumberType::DELAY_PREFIX
-                );
                 statement = format!(
                     "{}{} {statement}",
                     NumberType::DELAY_PREFIX,
@@ -247,17 +241,12 @@ fn collapse_blocks(statements: impl IntoIterator<Item = String>) -> AResult<Vec<
                 );
             }
             if !statement_start.contains(NumberType::DURATION_PREFIX) {
-                println!(
-                    "{statement_start} does not contain {}",
-                    NumberType::DURATION_PREFIX
-                );
                 statement = format!(
                     "{}{} {statement}",
                     NumberType::DURATION_PREFIX,
                     current_block.duration,
                 );
             }
-            println!("Statement: {statement}\n---");
             Ok(statement)
         })
         .filter(|statement| !matches!(statement, Ok(statement) if statement.is_empty()))
