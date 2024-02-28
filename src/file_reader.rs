@@ -1,3 +1,34 @@
+use std::fs;
+
+use crate::{
+    errors::GenericError,
+    statements::{Program, TrackedChar},
+};
+
+pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
+    let contents =
+        fs::read_to_string(file_path).map_err(|err| GenericError::InvalidPath(err.to_string()))?;
+    let mut iterator = contents
+        .lines()
+        .enumerate()
+        .flat_map(|(line_number, line)| {
+            line.chars()
+                .enumerate()
+                .map(move |(column_number, character)| {
+                    TrackedChar::new(line_number, column_number, character)
+                })
+        });
+    Program::parse(file_path, &mut iterator);
+    todo!()
+}
+pub struct CompiledFile {
+    pub path: String,
+    pub object_name: String,
+    pub animation_name: String,
+    pub contents: String,
+}
+
+/*
 use anyhow::{bail, Context};
 use anyhow::{ensure, Result as AResult};
 use regex::Regex;
@@ -10,6 +41,7 @@ use std::str::FromStr;
 use crate::errors::{CompileError, NumberSetError};
 use crate::objects::Transformation;
 use crate::{collect_errors, compiled};
+
 
 macro_rules! next_element {
     ($elements:expr, $statement:expr, $current:expr) => {
@@ -376,3 +408,4 @@ fn parse_coordinate(coordinate: &str, current: f32) -> AResult<f32> {
             .map_err(|err| CompileError::InvalidCoordinate(coordinate.clone(), err).into())
     }
 }
+ */
