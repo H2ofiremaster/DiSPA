@@ -1,9 +1,11 @@
 use std::{fmt::Display, str::FromStr};
 
 use crate::{
-    errors::CompileErrorType,
+    errors::{CompileErrorType, GenericError},
     objects::{Entity, Rotation, Scale, Translation},
 };
+
+use anyhow::{bail, ensure, Result as AResult};
 
 pub struct TrackedChar {
     line: usize,
@@ -21,23 +23,75 @@ impl TrackedChar {
 }
 
 pub struct Program {
-    statements: Statement,
+    base_block: Statement,
 }
 impl Program {
-    pub fn parse(file_path: &str, mut contents: &mut impl Iterator<Item = TrackedChar>) {
-        todo!()
+    pub fn parse_from_file(
+        file_path: &str,
+        contents: &mut impl Iterator<Item = TrackedChar>,
+    ) -> AResult<Self> {
+        let mut base_block = Statement::Block(Block::new(NumberSet::default(), Vec::new()));
+
+        Ok(Program {
+            base_block: Self::parse_block(file_path, contents, base_block)?,
+        })
+    }
+    fn parse_block(
+        file_path: &str,
+        contents: &mut impl Iterator<Item = TrackedChar>,
+        mut base_block: Statement,
+    ) -> AResult<Statement> {
+        let Statement::Block(ref mut current_block) = base_block else {
+            bail!(GenericError::BlockNotBlock(base_block.clone()))
+        };
+        let next_statement =
+            Statement::parse_from_file(file_path, contents, &current_block.numbers)?;
+        match next_statement {
+            Statement::Block(_) => {
+                current_block.statements.push(Self::parse_block(
+                    file_path,
+                    contents,
+                    next_statement,
+                )?);
+            }
+            Statement::Empty => {}
+            _ => {
+                current_block.statements.push(next_statement);
+            }
+        };
+        Ok(base_block)
     }
 }
 
-enum Statement {
+#[derive(Debug, Clone)]
+struct Block {
+    numbers: NumberSet,
+    statements: Vec<Statement>,
+}
+impl Block {
+    fn new(numbers: NumberSet, statements: Vec<Statement>) -> Self {
+        Self {
+            numbers,
+            statements,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Statement {
     ObjectName(String),
     AnimationName(String),
-    Block(NumberSet, Vec<Statement>),
+    Block(Block),
     Keyword(NumberSet, Entity, KeywordStatement),
     End(u32),
+    Empty,
 }
 impl Statement {
-    pub fn parse(file_path: &str, mut contents: &mut impl Iterator<Item = TrackedChar>) {
+    pub fn parse_from_file(
+        file_path: &str,
+        contents: &mut impl Iterator<Item = TrackedChar>,
+        current_numbers: &NumberSet,
+    ) -> AResult<Self> {
         todo!()
     }
 }
@@ -62,6 +116,7 @@ impl FromStr for Keyword {
     }
 }
 
+#[derive(Debug, Clone)]
 enum KeywordStatement {
     Translate(Translation),
     Rotate(Rotation),
@@ -71,10 +126,15 @@ enum KeywordStatement {
 
 enum EntityType {}
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 struct NumberSet {
     delay: u32,
     duration: u32,
+}
+impl NumberSet {
+    fn new(delay: u32, duration: u32) -> Self {
+        Self { delay, duration }
+    }
 }
 
 #[derive(Debug)]

@@ -18,7 +18,7 @@ pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
                     TrackedChar::new(line_number, column_number, character)
                 })
         });
-    Program::parse(file_path, &mut iterator);
+    Program::parse_from_file(file_path, &mut iterator);
     todo!()
 }
 pub struct CompiledFile {

@@ -96,6 +96,7 @@ impl Transformation {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Entity {
     pub name: String,
     pub transformation: Transformation,

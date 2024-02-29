@@ -2,12 +2,24 @@ use std::fmt::Display;
 
 use thiserror::Error;
 
+use crate::statements::Statement;
+
 #[derive(Debug)]
 pub struct CompileError {
     file_path: String,
     line: u32,
     column: u32,
     error_type: CompileErrorType,
+}
+impl CompileError {
+    pub fn new(file_path: String, line: u32, column: u32, error_type: CompileErrorType) -> Self {
+        CompileError {
+            file_path,
+            line,
+            column,
+            error_type,
+        }
+    }
 }
 impl Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -33,7 +45,7 @@ pub enum CompileErrorType {
 impl Display for CompileErrorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CompileErrorType::InvalidKeyword(keyword) => {
+            Self::InvalidKeyword(keyword) => {
                 write!(f, "Keyword '{keyword}' is invalid.")
             }
         }
@@ -54,4 +66,8 @@ pub enum NumberSetError {
 pub enum GenericError {
     #[error("The path '{0}' does not lead to a valid file.")]
     InvalidPath(String),
+    #[error("Block queue is empty.")]
+    BlockQueueEmpty,
+    #[error("Block '{0:?}' is not of type 'block'.")]
+    BlockNotBlock(Statement),
 }
