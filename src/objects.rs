@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use quaternion_core::{RotationSequence, RotationType};
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -112,4 +114,48 @@ impl From<String> for Entity {
 
 fn to_radians(degrees: f32) -> f32 {
     degrees * std::f32::consts::PI / 180.0
+}
+
+pub struct TrackedChar {
+    pub position: Position,
+    pub character: char,
+}
+impl TrackedChar {
+    pub fn new(line: usize, column: usize, character: char) -> Self {
+        Self {
+            position: Position::new(line, column),
+            character,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Position {
+    pub line: usize,
+    pub column: usize,
+}
+impl Position {
+    fn new(line: usize, column: usize) -> Self {
+        Self { line, column }
+    }
+}
+impl Add<usize> for Position {
+    type Output = Self;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        Self {
+            line: self.line,
+            column: self.column + rhs,
+        }
+    }
+}
+impl Add<(usize, usize)> for Position {
+    type Output = Self;
+
+    fn add(self, rhs: (usize, usize)) -> Self::Output {
+        Self {
+            line: self.line + rhs.0,
+            column: self.column + rhs.1,
+        }
+    }
 }

@@ -2,7 +2,8 @@ use std::fs;
 
 use crate::{
     errors::GenericError,
-    statements::{Program, TrackedChar},
+    objects::TrackedChar,
+    statements::{FileInfo, Program},
 };
 
 pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
@@ -18,7 +19,17 @@ pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
                     TrackedChar::new(line_number, column_number, character)
                 })
         });
-    Program::parse_from_file(file_path, &mut iterator);
+    Program::parse_from_file(
+        FileInfo::new(
+            file_path.to_string(),
+            TrackedChar::new(
+                contents.chars().filter(|&c| c == '\n').count(),
+                contents.lines().last().map(|c| c.len()).unwrap_or(0),
+                contents.chars().last().unwrap_or('\n'),
+            ),
+        ),
+        &mut iterator,
+    );
     todo!()
 }
 pub struct CompiledFile {
