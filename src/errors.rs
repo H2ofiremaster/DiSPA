@@ -1,9 +1,9 @@
-use std::fmt::Display;
+use std::{fmt::Display, num::ParseIntError};
 
 use thiserror::Error;
 
 use crate::{
-    objects::Position,
+    objects::{Number, NumberType, Position},
     statements::{FileInfo, Statement},
 };
 
@@ -15,14 +15,11 @@ pub struct CompileError {
     error_type: CompileErrorType,
 }
 impl CompileError {
-    pub fn new(file_info: FileInfo, position: Position, error_type: CompileErrorType) -> Self {
-        let file_path = file_info.path;
-        let line = position.line as u32;
-        let column = position.column as u32;
+    pub fn new(file_info: &FileInfo, position: Position, error_type: CompileErrorType) -> Self {
         Self {
-            file_path,
-            line,
-            column,
+            file_path: file_info.path.clone(),
+            line: position.line as u32,
+            column: position.column as u32,
             error_type,
         }
     }
@@ -49,6 +46,13 @@ pub enum CompileErrorType {
     LineEmpty(String),
     TooManyCharacters(String, usize, usize),
     KeywordWithoutArguments(String, String),
+    InvalidCharacters(String),
+    InvalidNumberPrefix(char),
+    InvalidInt(String, ParseIntError),
+    StringSectionEmpty(String),
+    TooManyWords(String, usize, usize),
+    IncorrectNumberType(Number, NumberType),
+    InvalidNumberSet(NumberSetError),
 }
 impl Display for CompileErrorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -74,6 +78,33 @@ impl Display for CompileErrorType {
                     "Statement '{statement}' specifies keyword '{keyword}' without arguments."
                 )
             }
+            Self::InvalidCharacters(statement) => {
+                write!(f, "Statement '{statement}' contains invalid characters.")
+            }
+            Self::InvalidNumberPrefix(char) => {
+                write!(f, "Character '{char}' is an invalid number prefix.")
+            }
+            Self::InvalidInt(number, error) => {
+                write!(f, "Number '{number}' is not a valid int: {error}")
+            }
+            Self::StringSectionEmpty(string) => {
+                write!(f, "Section of string '{string}' is empty.")
+            }
+            Self::TooManyWords(statement, expected, found) => {
+                write!(
+                    f,
+                    "Too many words in '{statement}': Expected '{expected}', found '{found}'."
+                )
+            }
+            Self::IncorrectNumberType(number, expected) => {
+                write!(
+                    f,
+                    "Number '{number}' is of incorrect type. Expected: '{expected}'."
+                )
+            }
+            Self::InvalidNumberSet(error) => {
+                write!(f, "Could not parse NumberSet: {error}")
+            }
         }
     }
 }
@@ -81,7 +112,7 @@ impl Display for CompileErrorType {
 #[derive(Debug, Error)]
 pub enum NumberSetError {
     #[error("The numbers are both of type {0}.")]
-    Duplicate(crate::statements::NumberType),
+    Duplicate(NumberType),
     #[error("Too many numbers: {0}/2")]
     TooMany(u32),
     #[error("Too few numbers: {0}/2")]

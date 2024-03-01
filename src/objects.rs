@@ -1,6 +1,9 @@
-use std::ops::Add;
+use std::{fmt::Display, ops::Add, str::FromStr};
 
 use quaternion_core::{RotationSequence, RotationType};
+use regex::Regex;
+
+use crate::errors::{CompileErrorType as ErrorType, GenericError, NumberSetError};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Translation {
@@ -29,15 +32,20 @@ pub struct Rotation {
     pub pitch: f32,
     pub roll: f32,
 }
+impl Rotation {
+    fn to_radians(degrees: f32) -> f32 {
+        degrees * std::f32::consts::PI / 180.0
+    }
+}
 impl ToString for Rotation {
     fn to_string(&self) -> String {
         let quaternion = quaternion_core::from_euler_angles(
             RotationType::Intrinsic,
             RotationSequence::YZX,
             [
-                to_radians(self.pitch),
-                to_radians(self.yaw),
-                to_radians(self.roll),
+                Self::to_radians(self.pitch),
+                Self::to_radians(self.yaw),
+                Self::to_radians(self.roll),
             ],
         );
         format!(
@@ -112,10 +120,7 @@ impl From<String> for Entity {
     }
 }
 
-fn to_radians(degrees: f32) -> f32 {
-    degrees * std::f32::consts::PI / 180.0
-}
-
+#[derive(Debug, Clone, Copy)]
 pub struct TrackedChar {
     pub position: Position,
     pub character: char,
@@ -156,6 +161,111 @@ impl Add<(usize, usize)> for Position {
         Self {
             line: self.line + rhs.0,
             column: self.column + rhs.1,
+        }
+    }
+}
+
+pub struct Regexes {
+    pub comment: Regex,
+    pub valid_character: Regex,
+}
+impl Regexes {
+    const COMMENT_REGEX: &'static str = r"#.*?\n";
+    const VALID_CHARACTER_REGEX: &'static str = r"^[A-Za-z0-9_\-]*$";
+
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Regexes {
+            comment: Regex::new(Self::COMMENT_REGEX)
+                .map_err(|err| GenericError::InvalidRegex(Self::COMMENT_REGEX, err))?,
+            valid_character: Regex::new(Self::VALID_CHARACTER_REGEX)
+                .map_err(|err| GenericError::InvalidRegex(Self::VALID_CHARACTER_REGEX, err))?,
+        })
+    }
+}
+
+enum EntityType {}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Number {
+    pub value: u32,
+    pub number_type: NumberType,
+}
+impl FromStr for Number {
+    type Err = ErrorType;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (prefix_str, number_str) = s.split_at(1);
+        let number_type: NumberType = prefix_str
+            .chars()
+            .next()
+            .ok_or(ErrorType::StringSectionEmpty(s.to_string()))?
+            .try_into()?;
+        let value: u32 = number_str
+            .parse()
+            .map_err(|err| ErrorType::InvalidInt(number_str.to_string(), err))?;
+        Ok(Self { value, number_type })
+    }
+}
+impl Display for Number {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.value, self.number_type)
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NumberSet {
+    pub delay: u32,
+    pub duration: u32,
+}
+impl NumberSet {
+    pub fn new(delay: u32, duration: u32) -> Self {
+        Self { delay, duration }
+    }
+
+    pub fn new_unordered(value_1: Number, value_2: Number) -> Result<Self, NumberSetError> {
+        match (value_1.number_type, value_2.number_type) {
+            (NumberType::Delay, NumberType::Duration) => Ok(Self {
+                delay: value_1.value,
+                duration: value_2.value,
+            }),
+            (NumberType::Duration, NumberType::Delay) => Ok(Self {
+                delay: value_2.value,
+                duration: value_1.value,
+            }),
+            _ => Err(NumberSetError::Duplicate(value_1.number_type)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumberType {
+    Delay,
+    Duration,
+}
+impl NumberType {
+    const DELAY_PREFIX: char = '@';
+    const DURATION_PREFIX: char = '%';
+
+    pub fn has_prefix(string: &str) -> bool {
+        string.starts_with(Self::DELAY_PREFIX) || string.starts_with(Self::DURATION_PREFIX)
+    }
+}
+impl Display for NumberType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NumberType::Delay => write!(f, "Delay: ({})", Self::DELAY_PREFIX),
+            NumberType::Duration => write!(f, "Duration: ({})", Self::DURATION_PREFIX),
+        }
+    }
+}
+impl TryFrom<char> for NumberType {
+    type Error = ErrorType;
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        match value {
+            Self::DELAY_PREFIX => Ok(Self::Delay),
+            Self::DURATION_PREFIX => Ok(Self::Duration),
+            _ => Err(ErrorType::InvalidNumberPrefix(value)),
         }
     }
 }
