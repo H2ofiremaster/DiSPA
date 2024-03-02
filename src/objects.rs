@@ -3,7 +3,17 @@ use std::{fmt::Display, ops::Add, str::FromStr};
 use quaternion_core::{RotationSequence, RotationType};
 use regex::Regex;
 
-use crate::errors::{CompileErrorType as ErrorType, GenericError, NumberSetError};
+use crate::{
+    errors::{CompileErrorType as ErrorType, GenericError, NumberSetError},
+    statements::KeywordStatement,
+};
+
+pub trait SimpleTransformation {
+    fn to_statement(self) -> KeywordStatement;
+    fn get_x(transformation: Transformation) -> f32;
+    fn get_y(transformation: Transformation) -> f32;
+    fn get_z(transformation: Transformation) -> f32;
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Translation {
@@ -23,6 +33,20 @@ impl From<(f32, f32, f32)> for Translation {
             y: value.1,
             z: value.2,
         }
+    }
+}
+impl SimpleTransformation for Translation {
+    fn to_statement(self) -> KeywordStatement {
+        KeywordStatement::Translate(self)
+    }
+    fn get_x(transformation: Transformation) -> f32 {
+        transformation.translation.x
+    }
+    fn get_y(transformation: Transformation) -> f32 {
+        transformation.translation.y
+    }
+    fn get_z(transformation: Transformation) -> f32 {
+        transformation.translation.z
     }
 }
 
@@ -63,6 +87,20 @@ impl From<(f32, f32, f32)> for Rotation {
         }
     }
 }
+impl SimpleTransformation for Rotation {
+    fn to_statement(self) -> KeywordStatement {
+        KeywordStatement::Rotate(self)
+    }
+    fn get_x(transformation: Transformation) -> f32 {
+        transformation.rotation.yaw
+    }
+    fn get_y(transformation: Transformation) -> f32 {
+        transformation.rotation.pitch
+    }
+    fn get_z(transformation: Transformation) -> f32 {
+        transformation.rotation.roll
+    }
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Scale {
@@ -82,6 +120,20 @@ impl From<(f32, f32, f32)> for Scale {
             y: value.1,
             z: value.2,
         }
+    }
+}
+impl SimpleTransformation for Scale {
+    fn to_statement(self) -> KeywordStatement {
+        KeywordStatement::Scale(self)
+    }
+    fn get_x(transformation: Transformation) -> f32 {
+        transformation.scale.x
+    }
+    fn get_y(transformation: Transformation) -> f32 {
+        transformation.scale.y
+    }
+    fn get_z(transformation: Transformation) -> f32 {
+        transformation.scale.z
     }
 }
 
@@ -111,8 +163,8 @@ pub struct Entity {
     pub name: String,
     pub transformation: Transformation,
 }
-impl From<String> for Entity {
-    fn from(value: String) -> Self {
+impl Entity {
+    pub fn new(value: String) -> Self {
         Self {
             name: value,
             transformation: Transformation::default(),

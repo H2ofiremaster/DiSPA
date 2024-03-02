@@ -1,4 +1,7 @@
-use std::{fmt::Display, num::ParseIntError};
+use std::{
+    fmt::Display,
+    num::{ParseFloatError, ParseIntError},
+};
 
 use thiserror::Error;
 
@@ -50,10 +53,11 @@ pub enum CompileErrorType {
     InvalidNumberPrefix(char),
     InvalidInt(String, ParseIntError),
     StringSectionEmpty(String),
-    TooManyWords(String, usize, usize),
+    IncorrectArgumentCount(String, usize, usize),
     IncorrectNumberType(Number, NumberType),
     InvalidNumberSet(NumberSetError),
     IncorrectSeparator(String, char),
+    InvalidCoordinate(String, ParseFloatError),
 }
 impl Display for CompileErrorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -91,10 +95,10 @@ impl Display for CompileErrorType {
             Self::StringSectionEmpty(string) => {
                 write!(f, "Section of string '{string}' is empty.")
             }
-            Self::TooManyWords(statement, expected, found) => {
+            Self::IncorrectArgumentCount(statement, expected, found) => {
                 write!(
                     f,
-                    "Too many words in '{statement}': Expected '{expected}', found '{found}'."
+                    "Incorrect number of arguments in '{statement}': Expected '{expected}', found '{found}'."
                 )
             }
             Self::IncorrectNumberType(number, expected) => {
@@ -111,6 +115,9 @@ impl Display for CompileErrorType {
                     f,
                     "Statement '{statement}' had the incorrect separator: Expected '{expected}'."
                 )
+            }
+            Self::InvalidCoordinate(coordinate, error) => {
+                write!(f, "Coordinate '{coordinate}' is invalid: {error}")
             }
         }
     }

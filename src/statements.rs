@@ -1,14 +1,14 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use crate::{
     errors::{CompileError, CompileErrorType as ErrorType, GenericError},
     objects::{
-        Entity, Number, NumberSet, NumberType, Position, Regexes, Rotation, Scale, TrackedChar,
-        Translation,
+        Entity, Number, NumberSet, NumberType, Position, Regexes, Rotation, Scale,
+        SimpleTransformation, TrackedChar, Translation,
     },
 };
 
-use anyhow::{bail, ensure, Result as AResult};
+use anyhow::{ensure, Result as AResult};
 use itertools::Itertools;
 use regex::Regex;
 
@@ -24,58 +24,51 @@ impl FileInfo {
 }
 
 pub struct Program {
-    base_block: Statement,
+    statements: Vec<Statement>,
 }
 impl Program {
     pub fn parse_from_file<I: Iterator<Item = TrackedChar>>(
         file_info: FileInfo,
         contents: &mut I,
     ) -> AResult<Self> {
-        let base_block = Statement::Block(Block::new(NumberSet::default(), Vec::new()));
         Ok(Program {
-            base_block: Self::parse_block(file_info, contents, base_block, Regexes::new()?)?,
+            statements: Self::parse_statements(file_info, contents, Regexes::new()?)?,
         })
     }
-    fn parse_block<I: Iterator<Item = TrackedChar>>(
+    fn parse_statements<I: Iterator<Item = TrackedChar>>(
         file_info: FileInfo,
         contents: &mut I,
-        mut base_block: Statement,
         regexes: Regexes,
-    ) -> AResult<Statement> {
-        let Statement::Block(ref mut base_block_data) = base_block else {
-            bail!(GenericError::BlockNotBlock(base_block.clone()))
-        };
-        let next_statement =
-            Statement::parse_from_file(&file_info, contents, base_block_data.numbers, &regexes)?;
-        match next_statement {
-            Statement::Block(_) => {
-                base_block_data.statements.push(Self::parse_block(
-                    file_info,
-                    contents,
-                    next_statement,
-                    regexes,
-                )?);
-            }
-            Statement::BlockEnd => {}
-            _ => {
-                base_block_data.statements.push(next_statement);
-            }
-        };
-        Ok(base_block)
-    }
-}
+    ) -> AResult<Vec<Statement>> {
+        let mut block_queue = vec![NumberSet::default()];
+        let mut entity_map: HashMap<String, Entity> = HashMap::new();
+        let mut statements: Vec<Statement> = Vec::new();
 
-#[derive(Debug, Clone)]
-struct Block {
-    numbers: NumberSet,
-    statements: Vec<Statement>,
-}
-impl Block {
-    fn new(numbers: NumberSet, statements: Vec<Statement>) -> Self {
-        Self {
-            numbers,
-            statements,
+        loop {
+            let current_numbers = *block_queue.last().ok_or(GenericError::BlockQueueEmpty)?;
+            let next_statement = Statement::parse_from_file(
+                &file_info,
+                contents,
+                current_numbers,
+                &regexes,
+                &mut entity_map,
+            )?;
+
+            match next_statement {
+                Statement::Block(number_set) => {
+                    block_queue.push(number_set);
+                }
+                Statement::BlockEnd => {
+                    block_queue.pop();
+                }
+                Statement::Empty => {
+                    break;
+                }
+                _ => {}
+            };
+            statements.push(next_statement);
         }
+        Ok(statements)
     }
 }
 
@@ -83,10 +76,11 @@ impl Block {
 pub enum Statement {
     ObjectName(String),
     AnimationName(String),
-    Block(Block),
+    Block(NumberSet),
     BlockEnd,
     Keyword(NumberSet, Entity, KeywordStatement),
     End(u32),
+    Empty,
 }
 impl Statement {
     const STATEMENT_END_CHAR: char = ';';
@@ -98,6 +92,7 @@ impl Statement {
         contents: &mut I,
         current_numbers: NumberSet,
         regexes: &Regexes,
+        entities: &mut HashMap<String, Entity>,
     ) -> AResult<Self> {
         let raw_buffer: (String, Position) = contents
             .take_while_inclusive(|c| {
@@ -123,6 +118,7 @@ impl Statement {
         dbg!(buffer);
 
         match &buffer {
+            _ if buffer.0.is_empty() => return Ok(Self::Empty),
             _ if buffer.0.starts_with(Self::BLOCK_END_CHAR) => {
                 return Self::parse_block_end(file_info, buffer);
             }
@@ -196,7 +192,50 @@ impl Statement {
             }
         }
 
-        bail!("Method not yet finished: {keyword}, {numbers:?}")
+        let arguments: Vec<_> = words.collect();
+
+        if keyword == &Self::BLOCK_START_CHAR.to_string() {
+            Self::parse_block_start(file_info, buffer, numbers);
+        }
+
+        match keyword
+            .parse()
+            .map_err(|err| CompileError::new(file_info, buffer.1, err))?
+        {
+            Keyword::Translate => Self::parse_transformation::<Translation>(
+                file_info, buffer, numbers, &arguments, entities,
+            ),
+            Keyword::Rotate => Self::parse_transformation::<Rotation>(
+                file_info, buffer, numbers, &arguments, entities,
+            ),
+            Keyword::Scale => Self::parse_transformation::<Scale>(
+                file_info, buffer, numbers, &arguments, entities,
+            ),
+            _ => Err(anyhow::anyhow!(CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::InvalidKeyword(buffer.0.to_string())
+            ))),
+        }
+    }
+
+    fn parse_block_start(
+        file_info: &FileInfo,
+        buffer: (&str, Position),
+        numbers: NumberSet,
+    ) -> AResult<Statement> {
+        assert!(buffer.0.contains(Self::BLOCK_START_CHAR));
+        let words: Vec<_> = buffer.0.split(' ').collect();
+
+        ensure!(
+            words.len() == 2,
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 2, words.len())
+            )
+        );
+        Ok(Self::Block(numbers))
     }
 
     fn parse_block_end(file_info: &FileInfo, buffer: (&str, Position)) -> AResult<Statement> {
@@ -278,10 +317,88 @@ impl Statement {
             CompileError::new(
                 file_info,
                 buffer.1,
-                ErrorType::TooManyWords(buffer.0.to_string(), 2, words.len())
+                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 0, words.len())
             )
         );
         Ok(Self::End(number.value))
+    }
+
+    fn parse_transformation<T>(
+        file_info: &FileInfo,
+        buffer: (&str, Position),
+        numbers: NumberSet,
+        arguments: &[&str],
+        entities: &mut HashMap<String, Entity>,
+    ) -> AResult<Statement>
+    where
+        T: SimpleTransformation + From<(f32, f32, f32)>,
+    {
+        ensure!(
+            arguments.len() == 4,
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 4, arguments.len())
+            )
+        );
+        let entity_name = arguments[0].to_owned();
+        let entity = entities
+            .get(&entity_name)
+            .unwrap_or(&Entity::new(entity_name))
+            .clone();
+        let coordinates: (f32, f32, f32) = (
+            Self::parse_coordinate(
+                file_info,
+                buffer.1,
+                arguments[1],
+                T::get_x(entity.transformation),
+            )?,
+            Self::parse_coordinate(
+                file_info,
+                buffer.1,
+                arguments[2],
+                T::get_y(entity.transformation),
+            )?,
+            Self::parse_coordinate(
+                file_info,
+                buffer.1,
+                arguments[3],
+                T::get_z(entity.transformation),
+            )?,
+        );
+        let t: T = T::from(coordinates);
+        Ok(Self::Keyword(numbers, entity, t.to_statement()))
+    }
+
+    fn parse_coordinate(
+        info: &FileInfo,
+        pos: Position,
+        coordinate: &str,
+        current: f32,
+    ) -> AResult<f32> {
+        let coordinate = coordinate.to_string();
+        if coordinate.starts_with('~') {
+            Ok(coordinate
+                .replace("~-", "-0")
+                .replace('~', "0")
+                .parse::<f32>()
+                .map_err(|err| {
+                    CompileError::new(
+                        info,
+                        pos,
+                        ErrorType::InvalidCoordinate(coordinate.clone(), err),
+                    )
+                })?
+                + current)
+        } else {
+            Ok(coordinate.parse::<f32>().map_err(|err| {
+                CompileError::new(
+                    info,
+                    pos,
+                    ErrorType::InvalidCoordinate(coordinate.clone(), err).into(),
+                )
+            })?)
+        }
     }
 }
 
@@ -292,9 +409,6 @@ enum Keyword {
     //Spawn,
 }
 impl Keyword {
-    pub const TRANSLATE_STR: &'static str = "translate";
-    pub const ROTATE_STR: &'static str = "rotate";
-    pub const SCALE_STR: &'static str = "scale";
     pub const OBJECT_STR: &'static str = "object";
     pub const ANIMATION_STR: &'static str = "anim";
     pub const END_STR: &'static str = "end";
@@ -314,7 +428,7 @@ impl FromStr for Keyword {
 }
 
 #[derive(Debug, Clone)]
-enum KeywordStatement {
+pub enum KeywordStatement {
     Translate(Translation),
     Rotate(Rotation),
     Scale(Scale),
@@ -340,20 +454,41 @@ mod tests {
 
         let current_numbers = NumberSet::new(0, 0);
         let regexes = Regexes::new().unwrap();
+        let mut entity_map = HashMap::new();
 
-        let test_1 =
-            Statement::parse_from_file(&file_info, &mut contents, current_numbers, &regexes);
+        let test_1 = Statement::parse_from_file(
+            &file_info,
+            &mut contents,
+            current_numbers,
+            &regexes,
+            &mut entity_map,
+        );
         println!("Test 1: {test_1:?}");
-        let test_2 =
-            Statement::parse_from_file(&file_info, &mut contents, current_numbers, &regexes);
+        let test_2 = Statement::parse_from_file(
+            &file_info,
+            &mut contents,
+            current_numbers,
+            &regexes,
+            &mut entity_map,
+        );
         println!("Test 2: {test_2:?}");
 
-        let test_3 =
-            Statement::parse_from_file(&file_info, &mut contents, current_numbers, &regexes);
+        let test_3 = Statement::parse_from_file(
+            &file_info,
+            &mut contents,
+            current_numbers,
+            &regexes,
+            &mut entity_map,
+        );
         println!("Test 3: {test_3:?}");
 
-        let test_4 =
-            Statement::parse_from_file(&file_info, &mut contents, current_numbers, &regexes);
+        let test_4 = Statement::parse_from_file(
+            &file_info,
+            &mut contents,
+            current_numbers,
+            &regexes,
+            &mut entity_map,
+        );
         println!("Test 4: {test_4:?}");
 
         // for c in contents {
