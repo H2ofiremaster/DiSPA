@@ -4,7 +4,7 @@ use quaternion_core::{RotationSequence, RotationType};
 use regex::Regex;
 
 use crate::{
-    errors::{CompileErrorType as ErrorType, GenericError, NumberSetError},
+    errors::{CompileErrorType as ErrorType, GenericError},
     statements::KeywordStatement,
 };
 
@@ -284,7 +284,7 @@ impl NumberSet {
         Self { delay, duration }
     }
 
-    pub fn new_unordered(value_1: Number, value_2: Number) -> Result<Self, NumberSetError> {
+    pub fn new_unordered(value_1: Number, value_2: Number) -> Result<Self, ErrorType> {
         match (value_1.number_type, value_2.number_type) {
             (NumberType::Delay, NumberType::Duration) => Ok(Self {
                 delay: value_1.value,
@@ -294,7 +294,7 @@ impl NumberSet {
                 delay: value_2.value,
                 duration: value_1.value,
             }),
-            _ => Err(NumberSetError::Duplicate(value_1.number_type)),
+            _ => Err(ErrorType::DuplicateNumberType(value_1.number_type)),
         }
     }
 }

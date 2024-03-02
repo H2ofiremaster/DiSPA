@@ -183,7 +183,9 @@ impl Statement {
                 let second_number: Number = second_word
                     .parse()
                     .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
-                numbers = NumberSet::new_unordered(first_number, second_number)?;
+
+                numbers = NumberSet::new_unordered(first_number, second_number)
+                    .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
                 keyword = words.next().ok_or(CompileError::new(
                     file_info,
                     buffer.1,
@@ -194,8 +196,8 @@ impl Statement {
 
         let arguments: Vec<_> = words.collect();
 
-        if keyword == &Self::BLOCK_START_CHAR.to_string() {
-            Self::parse_block_start(file_info, buffer, numbers);
+        if keyword == Self::BLOCK_START_CHAR.to_string() {
+            return Self::parse_block_start(file_info, buffer, numbers);
         }
 
         match keyword
@@ -211,11 +213,6 @@ impl Statement {
             Keyword::Scale => Self::parse_transformation::<Scale>(
                 file_info, buffer, numbers, &arguments, entities,
             ),
-            _ => Err(anyhow::anyhow!(CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidKeyword(buffer.0.to_string())
-            ))),
         }
     }
 

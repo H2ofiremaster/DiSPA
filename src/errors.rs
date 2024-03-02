@@ -45,7 +45,6 @@ pub enum CompileErrorType {
     //#[error("The path '{0}' does not lead to a valid file.")]
     //InvalidPath(String),
     InvalidKeyword(String),
-    UnexpectedEof(String),
     LineEmpty(String),
     TooManyCharacters(String, usize, usize),
     KeywordWithoutArguments(String, String),
@@ -55,7 +54,7 @@ pub enum CompileErrorType {
     StringSectionEmpty(String),
     IncorrectArgumentCount(String, usize, usize),
     IncorrectNumberType(Number, NumberType),
-    InvalidNumberSet(NumberSetError),
+    DuplicateNumberType(NumberType),
     IncorrectSeparator(String, char),
     InvalidCoordinate(String, ParseFloatError),
 }
@@ -64,9 +63,6 @@ impl Display for CompileErrorType {
         match self {
             Self::InvalidKeyword(keyword) => {
                 write!(f, "Keyword '{keyword}' is invalid.")
-            }
-            Self::UnexpectedEof(expected) => {
-                write!(f, "Unexpected end of file: Expected {expected}.")
             }
             Self::LineEmpty(line) => {
                 write!(f, "Line '{line}' is empty.")
@@ -107,8 +103,11 @@ impl Display for CompileErrorType {
                     "Number '{number}' is of incorrect type. Expected: '{expected}'."
                 )
             }
-            Self::InvalidNumberSet(error) => {
-                write!(f, "Could not parse NumberSet: {error}")
+            Self::DuplicateNumberType(number_type) => {
+                write!(
+                    f,
+                    "Tried creating NumberSet with duplicate number type: {number_type}"
+                )
             }
             Self::IncorrectSeparator(statement, expected) => {
                 write!(
@@ -124,23 +123,11 @@ impl Display for CompileErrorType {
 }
 
 #[derive(Debug, Error)]
-pub enum NumberSetError {
-    #[error("The numbers are both of type {0}.")]
-    Duplicate(NumberType),
-    #[error("Too many numbers: {0}/2")]
-    TooMany(u32),
-    #[error("Too few numbers: {0}/2")]
-    TooFew(u32),
-}
-
-#[derive(Debug, Error)]
 pub enum GenericError {
     #[error("The path '{0}' does not lead to a valid file.")]
     InvalidPath(String),
     #[error("Block queue is empty.")]
     BlockQueueEmpty,
-    #[error("Block '{0:?}' is not of type 'block'.")]
-    BlockNotBlock(Statement),
     #[error("Pattern '{0}' is not a valid regex: {1}")]
     InvalidRegex(&'static str, #[source] regex::Error),
 }
