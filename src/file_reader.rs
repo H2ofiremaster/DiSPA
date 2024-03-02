@@ -6,19 +6,17 @@ use crate::{
     statements::{FileInfo, Program},
 };
 
+pub struct CompiledFile {
+    pub path: String,
+    pub object_name: String,
+    pub animation_name: String,
+    pub contents: String,
+}
+
 pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
     let contents =
         fs::read_to_string(file_path).map_err(|err| GenericError::InvalidPath(err.to_string()))?;
-    let mut iterator = contents
-        .lines()
-        .enumerate()
-        .flat_map(|(line_number, line)| {
-            line.chars()
-                .enumerate()
-                .map(move |(column_number, character)| {
-                    TrackedChar::new(line_number, column_number, character)
-                })
-        });
+    let mut iterator = to_tracked_iter(&contents);
     Program::parse_from_file(
         FileInfo::new(
             file_path.to_string(),
@@ -32,13 +30,16 @@ pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
     );
     todo!()
 }
-pub struct CompiledFile {
-    pub path: String,
-    pub object_name: String,
-    pub animation_name: String,
-    pub contents: String,
-}
 
+pub fn to_tracked_iter(string: &str) -> impl Iterator<Item = TrackedChar> + '_ {
+    string.lines().enumerate().flat_map(|(line_number, line)| {
+        line.chars()
+            .enumerate()
+            .map(move |(column_number, character)| {
+                TrackedChar::new(line_number, column_number, character)
+            })
+    })
+}
 /*
 use anyhow::{bail, Context};
 use anyhow::{ensure, Result as AResult};

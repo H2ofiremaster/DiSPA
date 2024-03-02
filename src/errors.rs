@@ -53,6 +53,7 @@ pub enum CompileErrorType {
     TooManyWords(String, usize, usize),
     IncorrectNumberType(Number, NumberType),
     InvalidNumberSet(NumberSetError),
+    IncorrectSeparator(String, char),
 }
 impl Display for CompileErrorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -104,6 +105,12 @@ impl Display for CompileErrorType {
             }
             Self::InvalidNumberSet(error) => {
                 write!(f, "Could not parse NumberSet: {error}")
+            }
+            Self::IncorrectSeparator(statement, expected) => {
+                write!(
+                    f,
+                    "Statement '{statement}' had the incorrect separator: Expected '{expected}'."
+                )
             }
         }
     }

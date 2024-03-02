@@ -9,6 +9,7 @@ use crate::{
 };
 
 use anyhow::{bail, ensure, Result as AResult};
+use itertools::Itertools;
 use regex::Regex;
 
 #[derive(Debug, Clone)]
@@ -44,12 +45,8 @@ impl Program {
         let Statement::Block(ref mut base_block_data) = base_block else {
             bail!(GenericError::BlockNotBlock(base_block.clone()))
         };
-        let next_statement = Statement::parse_from_file(
-            file_info.clone(),
-            contents,
-            base_block_data.numbers,
-            &regexes,
-        )?;
+        let next_statement =
+            Statement::parse_from_file(&file_info, contents, base_block_data.numbers, &regexes)?;
         match next_statement {
             Statement::Block(_) => {
                 base_block_data.statements.push(Self::parse_block(
@@ -94,16 +91,16 @@ pub enum Statement {
 impl Statement {
     const STATEMENT_END_CHAR: char = ';';
     const BLOCK_START_CHAR: char = '{';
-    const BLOCK_END_CHAR: char = '{';
+    const BLOCK_END_CHAR: char = '}';
 
     fn parse_from_file<I: Iterator<Item = TrackedChar>>(
-        file_info: FileInfo,
+        file_info: &FileInfo,
         contents: &mut I,
         current_numbers: NumberSet,
         regexes: &Regexes,
     ) -> AResult<Self> {
         let raw_buffer: (String, Position) = contents
-            .take_while(|c| {
+            .take_while_inclusive(|c| {
                 ![
                     Self::STATEMENT_END_CHAR,
                     Self::BLOCK_START_CHAR,
@@ -123,22 +120,36 @@ impl Statement {
         let buffer_string: &str = buffer_string.trim();
         let buffer: (&str, Position) = (buffer_string, raw_buffer.1);
 
+        dbg!(buffer);
+
         match &buffer {
             _ if buffer.0.starts_with(Self::BLOCK_END_CHAR) => {
-                return Self::parse_block_end(&file_info, buffer)
+                return Self::parse_block_end(file_info, buffer);
             }
             _ if buffer.0.starts_with(Keyword::OBJECT_STR) => {
-                return Self::parse_object(&file_info, buffer, &regexes.valid_character)
+                return Self::parse_name_declaration(
+                    file_info,
+                    buffer,
+                    &regexes.valid_character,
+                    Keyword::OBJECT_STR,
+                    Self::ObjectName,
+                );
             }
             _ if buffer.0.starts_with(Keyword::ANIMATION_STR) => {
-                return Self::parse_animation(&file_info, buffer, &regexes.valid_character)
+                return Self::parse_name_declaration(
+                    file_info,
+                    buffer,
+                    &regexes.valid_character,
+                    Keyword::ANIMATION_STR,
+                    Self::AnimationName,
+                );
             }
             _ => {}
         }
         let mut words = buffer.0.split(' ');
 
         let first_word = words.next().ok_or(CompileError::new(
-            &file_info,
+            file_info,
             buffer.1,
             ErrorType::LineEmpty(buffer.0.to_string()),
         ))?;
@@ -150,15 +161,19 @@ impl Statement {
         } else {
             let first_number: Number = first_word
                 .parse()
-                .map_err(|err| CompileError::new(&file_info, buffer.1, err))?;
+                .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
 
             let second_word = words.next().ok_or(CompileError::new(
-                &file_info,
+                file_info,
                 buffer.1,
                 ErrorType::LineEmpty(buffer.0.to_string()),
             ))?;
 
             if !NumberType::has_prefix(second_word) {
+                if second_word == Keyword::END_STR {
+                    return Self::parse_end(file_info, first_number, buffer);
+                }
+
                 keyword = second_word;
                 numbers = match first_number.number_type {
                     NumberType::Delay => {
@@ -171,19 +186,17 @@ impl Statement {
             } else {
                 let second_number: Number = second_word
                     .parse()
-                    .map_err(|err| CompileError::new(&file_info, buffer.1, err))?;
+                    .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
                 numbers = NumberSet::new_unordered(first_number, second_number)?;
                 keyword = words.next().ok_or(CompileError::new(
-                    &file_info,
+                    file_info,
                     buffer.1,
                     ErrorType::LineEmpty(buffer.0.to_string()),
                 ))?;
             }
         }
 
-        dbg!((keyword, numbers));
-
-        todo!()
+        bail!("Method not yet finished: {keyword}, {numbers:?}")
     }
 
     fn parse_block_end(file_info: &FileInfo, buffer: (&str, Position)) -> AResult<Statement> {
@@ -200,22 +213,32 @@ impl Statement {
         Ok(Self::BlockEnd)
     }
 
-    fn parse_object(
+    fn parse_name_declaration<F: FnOnce(String) -> Statement>(
         file_info: &FileInfo,
         buffer: (&str, Position),
         valid_char_regex: &Regex,
+        keyword: &str,
+        return_value: F,
     ) -> AResult<Statement> {
-        assert!(buffer.0.starts_with(Keyword::OBJECT_STR));
+        assert!(buffer.0.starts_with(keyword));
+        ensure!(
+            buffer.0.ends_with(';'),
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::IncorrectSeparator(buffer.0.to_string(), ';')
+            )
+        );
         let (keyword, argument) = buffer.0.split_once(' ').ok_or(CompileError::new(
             file_info,
             buffer.1,
-            ErrorType::KeywordWithoutArguments(
-                Keyword::OBJECT_STR.to_string(),
-                buffer.0.to_string(),
-            ),
+            ErrorType::KeywordWithoutArguments(keyword.to_string(), buffer.0.to_string()),
         ))?;
+        let argument = &argument[..argument.len() - 1];
+
+        ensure!(keyword == keyword);
         ensure!(
-            !valid_char_regex.is_match(argument),
+            valid_char_regex.is_match(argument),
             CompileError::new(
                 file_info,
                 buffer.1,
@@ -223,34 +246,7 @@ impl Statement {
             )
         );
 
-        Ok(Self::ObjectName(argument.to_string()))
-    }
-
-    fn parse_animation(
-        file_info: &FileInfo,
-        buffer: (&str, Position),
-        valid_char_regex: &Regex,
-    ) -> AResult<Statement> {
-        assert!(buffer.0.starts_with(Keyword::ANIMATION_STR));
-        let (keyword, argument) = buffer.0.split_once(' ').ok_or(CompileError::new(
-            file_info,
-            buffer.1,
-            ErrorType::KeywordWithoutArguments(
-                Keyword::ANIMATION_STR.to_string(),
-                buffer.0.to_string(),
-            ),
-        ))?;
-        ensure!(keyword == Keyword::END_STR);
-        ensure!(
-            !valid_char_regex.is_match(argument),
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidCharacters(argument.to_string())
-            )
-        );
-
-        Ok(Self::AnimationName(argument.to_string()))
+        Ok(return_value(argument.to_string()))
     }
 
     fn parse_end(
@@ -259,6 +255,14 @@ impl Statement {
         buffer: (&str, Position),
     ) -> AResult<Statement> {
         assert!(buffer.0.contains(Keyword::END_STR));
+        ensure!(
+            buffer.0.ends_with(';'),
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::IncorrectSeparator(buffer.0.to_string(), ';')
+            )
+        );
         ensure!(
             number.number_type == NumberType::Delay,
             CompileError::new(
@@ -315,4 +319,45 @@ enum KeywordStatement {
     Rotate(Rotation),
     Scale(Scale),
     //Spawn(Entity, EntityType),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn statement_test() {
+        let test_str = "object t*est;\nanim invalid;\n}\n@10 %20 test; @10 delay; %20 duration;";
+        let mut contents = crate::file_reader::to_tracked_iter(test_str);
+        let file_info = FileInfo::new(
+            "test/path.dspa".to_string(),
+            TrackedChar::new(
+                test_str.chars().filter(|&c| c == '\n').count(),
+                test_str.lines().last().map(|c| c.len()).unwrap_or(0),
+                test_str.chars().last().unwrap_or('\n'),
+            ),
+        );
+
+        let current_numbers = NumberSet::new(0, 0);
+        let regexes = Regexes::new().unwrap();
+
+        let test_1 =
+            Statement::parse_from_file(&file_info, &mut contents, current_numbers, &regexes);
+        println!("Test 1: {test_1:?}");
+        let test_2 =
+            Statement::parse_from_file(&file_info, &mut contents, current_numbers, &regexes);
+        println!("Test 2: {test_2:?}");
+
+        let test_3 =
+            Statement::parse_from_file(&file_info, &mut contents, current_numbers, &regexes);
+        println!("Test 3: {test_3:?}");
+
+        let test_4 =
+            Statement::parse_from_file(&file_info, &mut contents, current_numbers, &regexes);
+        println!("Test 4: {test_4:?}");
+
+        // for c in contents {
+        //     println!("{}", c);
+        // }
+    }
 }

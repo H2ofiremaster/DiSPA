@@ -133,6 +133,11 @@ impl TrackedChar {
         }
     }
 }
+impl Display for TrackedChar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "'{}': {}", self.character, self.position)
+    }
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Position {
@@ -162,6 +167,11 @@ impl Add<(usize, usize)> for Position {
             line: self.line + rhs.0,
             column: self.column + rhs.1,
         }
+    }
+}
+impl Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.line, self.column)
     }
 }
 
