@@ -1,4 +1,10 @@
-use std::{fmt::Display, fs, io::Write, path::PathBuf, str::FromStr};
+use std::{
+    fmt::Display,
+    fs,
+    io::{stdin, Read, Write},
+    path::PathBuf,
+    str::FromStr,
+};
 
 use anyhow::ensure;
 use file_reader::parse_file;
@@ -40,10 +46,7 @@ pub fn collect_errors<T, E: Display>(input: Vec<Result<T, E>>) -> anyhow::Result
             acc.push_str(&format!("{}: {}\n", err.0, err.1));
             acc
         });
-    ensure!(
-        errors.is_empty(),
-        //CompileErrorType::InvalidCollection(errors)
-    );
+    ensure!(errors.is_empty(), GenericError::Collection(errors));
     Ok(input.into_iter().filter_map(|e| e.ok()).collect())
 }
 
@@ -79,6 +82,11 @@ fn main() -> anyhow::Result<()> {
                 &filtered_path
             ),
         )?;
+        println!("Successfully Compiled file: {filtered_path}");
     }
+
+    println!("Press Enter to continue...");
+    std::io::stdout().flush().unwrap();
+    let _ = stdin().read(&mut [0_u8]);
     Ok(())
 }

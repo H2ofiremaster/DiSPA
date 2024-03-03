@@ -103,7 +103,7 @@ impl Statement {
                 Self::BLOCK_END_CHAR,
             ],
         );
-        let buffer: (&str, Position) = (dbg!(buffer_string.trim()), buffer_pos);
+        let buffer: (&str, Position) = (buffer_string.trim(), buffer_pos);
 
         match &buffer {
             _ if buffer.0.is_empty() => return Ok(Self::EndOfFile),

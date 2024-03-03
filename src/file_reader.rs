@@ -8,8 +8,9 @@ use crate::{
 };
 
 pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
-    let contents =
-        fs::read_to_string(file_path).map_err(|err| GenericError::InvalidPath(err.to_string()))?;
+    let contents = fs::read_to_string(file_path)
+        .map_err(|err| GenericError::InvalidPath(err.to_string()))?
+        .replace('\r', "");
     let mut iterator = to_tracked_iter(&contents);
     let program = Program::parse_from_file(
         FileInfo::new(
@@ -23,7 +24,7 @@ pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
         &mut iterator,
     );
 
-    println!("{program:#?}");
+    // println!("{program:#?}");
     Ok(compiled::program(
         program?,
         &get_file_name(file_path)?,

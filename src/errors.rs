@@ -132,4 +132,6 @@ pub enum GenericError {
     InvalidRegex(&'static str, #[source] regex::Error),
     #[error("The file with path '{0}' does not exist.")]
     FileNotExist(String),
+    #[error("Could to compile one or more files due to errors:\n{0}")]
+    Collection(String),
 }
