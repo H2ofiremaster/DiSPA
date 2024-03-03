@@ -10,9 +10,12 @@ use crate::{
 
 pub trait SimpleTransformation {
     fn to_statement(self) -> KeywordStatement;
+
     fn get_x(transformation: Transformation) -> f32;
     fn get_y(transformation: Transformation) -> f32;
     fn get_z(transformation: Transformation) -> f32;
+
+    fn transform(&self, transformation: Transformation) -> Transformation;
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -21,8 +24,8 @@ pub struct Translation {
     pub y: f32,
     pub z: f32,
 }
-impl ToString for Translation {
-    fn to_string(&self) -> String {
+impl Translation {
+    pub fn compile(&self) -> String {
         format!("translation: [{}f,{}f,{}f]", self.x, self.y, self.z)
     }
 }
@@ -39,6 +42,7 @@ impl SimpleTransformation for Translation {
     fn to_statement(self) -> KeywordStatement {
         KeywordStatement::Translate(self)
     }
+
     fn get_x(transformation: Transformation) -> f32 {
         transformation.translation.x
     }
@@ -47,6 +51,10 @@ impl SimpleTransformation for Translation {
     }
     fn get_z(transformation: Transformation) -> f32 {
         transformation.translation.z
+    }
+
+    fn transform(&self, transformation: Transformation) -> Transformation {
+        transformation.with_translation(*self)
     }
 }
 
@@ -60,9 +68,8 @@ impl Rotation {
     fn to_radians(degrees: f32) -> f32 {
         degrees * std::f32::consts::PI / 180.0
     }
-}
-impl ToString for Rotation {
-    fn to_string(&self) -> String {
+
+    pub fn compile(&self) -> String {
         let quaternion = quaternion_core::from_euler_angles(
             RotationType::Intrinsic,
             RotationSequence::YZX,
@@ -91,6 +98,7 @@ impl SimpleTransformation for Rotation {
     fn to_statement(self) -> KeywordStatement {
         KeywordStatement::Rotate(self)
     }
+
     fn get_x(transformation: Transformation) -> f32 {
         transformation.rotation.yaw
     }
@@ -100,6 +108,10 @@ impl SimpleTransformation for Rotation {
     fn get_z(transformation: Transformation) -> f32 {
         transformation.rotation.roll
     }
+
+    fn transform(&self, transformation: Transformation) -> Transformation {
+        transformation.with_rotation(*self)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -108,8 +120,8 @@ pub struct Scale {
     pub y: f32,
     pub z: f32,
 }
-impl ToString for Scale {
-    fn to_string(&self) -> String {
+impl Scale {
+    pub fn compile(&self) -> String {
         format!("scale: [{}f,{}f,{}f]", self.x, self.y, self.z)
     }
 }
@@ -134,6 +146,9 @@ impl SimpleTransformation for Scale {
     }
     fn get_z(transformation: Transformation) -> f32 {
         transformation.scale.z
+    }
+    fn transform(&self, transformation: Transformation) -> Transformation {
+        transformation.with_scale(*self)
     }
 }
 
@@ -245,7 +260,7 @@ impl Regexes {
     }
 }
 
-enum EntityType {}
+// enum EntityType {}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Number {

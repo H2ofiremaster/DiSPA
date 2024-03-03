@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::{
     objects::{Number, NumberType, Position},
-    statements::{FileInfo, Statement},
+    statements::FileInfo,
 };
 
 #[derive(Debug)]
@@ -130,4 +130,6 @@ pub enum GenericError {
     BlockQueueEmpty,
     #[error("Pattern '{0}' is not a valid regex: {1}")]
     InvalidRegex(&'static str, #[source] regex::Error),
+    #[error("The file with path '{0}' does not exist.")]
+    FileNotExist(String),
 }

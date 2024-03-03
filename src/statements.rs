@@ -23,8 +23,9 @@ impl FileInfo {
     }
 }
 
+#[derive(Debug)]
 pub struct Program {
-    statements: Vec<Statement>,
+    pub statements: Vec<Statement>,
 }
 impl Program {
     pub fn parse_from_file<I: Iterator<Item = TrackedChar>>(
@@ -61,7 +62,7 @@ impl Program {
                 Statement::BlockEnd => {
                     block_queue.pop();
                 }
-                Statement::Empty => {
+                Statement::EndOfFile => {
                     break;
                 }
                 _ => {}
@@ -80,7 +81,7 @@ pub enum Statement {
     BlockEnd,
     Keyword(NumberSet, Entity, KeywordStatement),
     End(u32),
-    Empty,
+    EndOfFile,
 }
 impl Statement {
     const STATEMENT_END_CHAR: char = ';';
@@ -94,31 +95,18 @@ impl Statement {
         regexes: &Regexes,
         entities: &mut HashMap<String, Entity>,
     ) -> AResult<Self> {
-        let raw_buffer: (String, Position) = contents
-            .take_while_inclusive(|c| {
-                ![
-                    Self::STATEMENT_END_CHAR,
-                    Self::BLOCK_START_CHAR,
-                    Self::BLOCK_END_CHAR,
-                ]
-                .contains(&c.character)
-            })
-            .fold((String::new(), Position::default()), |mut acc, c| {
-                if acc.0.is_empty() {
-                    acc.1 = c.position;
-                }
-                acc.0.push(c.character);
-                acc
-            });
-        let comment_regex: &Regex = &regexes.comment;
-        let buffer_string: std::borrow::Cow<'_, str> = comment_regex.replace_all(&raw_buffer.0, "");
-        let buffer_string: &str = buffer_string.trim();
-        let buffer: (&str, Position) = (buffer_string, raw_buffer.1);
-
-        dbg!(buffer);
+        let (buffer_string, buffer_pos) = get_buffer_string(
+            contents,
+            &[
+                Self::STATEMENT_END_CHAR,
+                Self::BLOCK_START_CHAR,
+                Self::BLOCK_END_CHAR,
+            ],
+        );
+        let buffer: (&str, Position) = (dbg!(buffer_string.trim()), buffer_pos);
 
         match &buffer {
-            _ if buffer.0.is_empty() => return Ok(Self::Empty),
+            _ if buffer.0.is_empty() => return Ok(Self::EndOfFile),
             _ if buffer.0.starts_with(Self::BLOCK_END_CHAR) => {
                 return Self::parse_block_end(file_info, buffer);
             }
@@ -166,7 +154,7 @@ impl Statement {
             ))?;
 
             if !NumberType::has_prefix(second_word) {
-                if second_word == Keyword::END_STR {
+                if second_word.contains(Keyword::END_STR) {
                     return Self::parse_end(file_info, first_number, buffer);
                 }
 
@@ -194,12 +182,26 @@ impl Statement {
             }
         }
 
-        let arguments: Vec<_> = words.collect();
+        let arguments: Vec<_> = words
+            .map(|w| {
+                if w.ends_with(';') {
+                    return remove_last_char(w);
+                }
+                w
+            })
+            .collect();
 
         if keyword == Self::BLOCK_START_CHAR.to_string() {
             return Self::parse_block_start(file_info, buffer, numbers);
         }
-
+        ensure!(
+            buffer.0.ends_with(';'),
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::IncorrectSeparator(buffer.0.to_string(), ';')
+            )
+        );
         match keyword
             .parse()
             .map_err(|err| CompileError::new(file_info, buffer.1, err))?
@@ -225,11 +227,19 @@ impl Statement {
         let words: Vec<_> = buffer.0.split(' ').collect();
 
         ensure!(
-            words.len() == 2,
+            words.len() > 1,
             CompileError::new(
                 file_info,
                 buffer.1,
                 ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 2, words.len())
+            )
+        );
+        ensure!(
+            words.len() < 4,
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 3, words.len())
             )
         );
         Ok(Self::Block(numbers))
@@ -238,7 +248,7 @@ impl Statement {
     fn parse_block_end(file_info: &FileInfo, buffer: (&str, Position)) -> AResult<Statement> {
         assert!(buffer.0.starts_with(Self::BLOCK_END_CHAR));
         ensure!(
-            buffer.0.len() > 1,
+            buffer.0.len() <= 1,
             CompileError::new(
                 file_info,
                 buffer.1 + 1,
@@ -270,7 +280,7 @@ impl Statement {
             buffer.1,
             ErrorType::KeywordWithoutArguments(keyword.to_string(), buffer.0.to_string()),
         ))?;
-        let argument = &argument[..argument.len() - 1];
+        let argument = remove_last_char(argument);
 
         ensure!(keyword == keyword);
         ensure!(
@@ -317,6 +327,21 @@ impl Statement {
                 ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 0, words.len())
             )
         );
+        ensure!(
+            words
+                .last()
+                .is_some_and(|s| remove_last_char(s) == Keyword::END_STR),
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::InvalidKeyword(
+                    words
+                        .last()
+                        .expect("'words' should not be empty due to 'words.len() == 2' passing")
+                        .to_string()
+                )
+            )
+        );
         Ok(Self::End(number.value))
     }
 
@@ -340,9 +365,8 @@ impl Statement {
         );
         let entity_name = arguments[0].to_owned();
         let entity = entities
-            .get(&entity_name)
-            .unwrap_or(&Entity::new(entity_name))
-            .clone();
+            .entry(entity_name.clone())
+            .or_insert(Entity::new(entity_name));
         let coordinates: (f32, f32, f32) = (
             Self::parse_coordinate(
                 file_info,
@@ -364,7 +388,8 @@ impl Statement {
             )?,
         );
         let t: T = T::from(coordinates);
-        Ok(Self::Keyword(numbers, entity, t.to_statement()))
+        entity.transformation = t.transform(entity.transformation);
+        Ok(Self::Keyword(numbers, entity.clone(), t.to_statement()))
     }
 
     fn parse_coordinate(
@@ -392,7 +417,7 @@ impl Statement {
                 CompileError::new(
                     info,
                     pos,
-                    ErrorType::InvalidCoordinate(coordinate.clone(), err).into(),
+                    ErrorType::InvalidCoordinate(coordinate.clone(), err),
                 )
             })?)
         }
@@ -432,14 +457,49 @@ pub enum KeywordStatement {
     //Spawn(Entity, EntityType),
 }
 
+fn remove_last_char(s: &str) -> &str {
+    &s[..s.len() - 1]
+}
+
+fn get_buffer_string<I: Iterator<Item = TrackedChar>>(
+    iter: &mut I,
+    seperators: &[char],
+) -> (String, Position) {
+    let mut is_comment: bool = false;
+    iter.filter(|c| {
+        is_comment = match c.character {
+            '#' => true,
+            '\n' => false,
+            _ => is_comment,
+        };
+        !is_comment
+    })
+    .take_while_inclusive(|c| !seperators.contains(&c.character))
+    .fold((String::new(), Position::default()), |mut acc, c| {
+        if acc.0.is_empty() {
+            acc.1 = c.position;
+        }
+        acc.0.push(c.character);
+        acc
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn statement_test() {
-        let test_str = "object t*est;\nanim invalid;\n}\n@10 %20 test; @10 delay; %20 duration;";
+        let test_str = "object test;
+            # seperate comment
+            anim invalid;
+            @10 %20 move test 1 0 0; # inline comment
+            @10 turn test2 90 0 0;
+            @20 %20 move test ~2 ~ ~;";
         let mut contents = crate::file_reader::to_tracked_iter(test_str);
+        //println!("{}", contents.map(|c| c.character).collect::<String>());
+        //panic!();
+
         let file_info = FileInfo::new(
             "test/path.dspa".to_string(),
             TrackedChar::new(
@@ -487,6 +547,15 @@ mod tests {
             &mut entity_map,
         );
         println!("Test 4: {test_4:?}");
+
+        let test_5 = Statement::parse_from_file(
+            &file_info,
+            &mut contents,
+            current_numbers,
+            &regexes,
+            &mut entity_map,
+        );
+        println!("Test 5: {test_5:?}");
 
         // for c in contents {
         //     println!("{}", c);
