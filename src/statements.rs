@@ -73,6 +73,8 @@ impl Program {
     }
 }
 
+type Buffer<'a> = (&'a str, Position);
+
 #[derive(Debug, Clone)]
 pub enum Statement {
     ObjectName(String),
@@ -103,7 +105,7 @@ impl Statement {
                 Self::BLOCK_END_CHAR,
             ],
         );
-        let buffer: (&str, Position) = (buffer_string.trim(), buffer_pos);
+        let buffer: Buffer = (buffer_string.trim(), buffer_pos);
 
         match &buffer {
             _ if buffer.0.is_empty() => return Ok(Self::EndOfFile),
@@ -215,12 +217,16 @@ impl Statement {
             Keyword::Scale => Self::parse_transformation::<Scale>(
                 file_info, buffer, numbers, &arguments, entities,
             ),
+            Keyword::Spawn => todo!(),
+            Keyword::Item => todo!(),
+            Keyword::Block => todo!(),
+            Keyword::Text => todo!(),
         }
     }
 
     fn parse_block_start(
         file_info: &FileInfo,
-        buffer: (&str, Position),
+        buffer: Buffer,
         numbers: NumberSet,
     ) -> AResult<Statement> {
         assert!(buffer.0.contains(Self::BLOCK_START_CHAR));
@@ -245,7 +251,7 @@ impl Statement {
         Ok(Self::Block(numbers))
     }
 
-    fn parse_block_end(file_info: &FileInfo, buffer: (&str, Position)) -> AResult<Statement> {
+    fn parse_block_end(file_info: &FileInfo, buffer: Buffer) -> AResult<Statement> {
         assert!(buffer.0.starts_with(Self::BLOCK_END_CHAR));
         ensure!(
             buffer.0.len() <= 1,
@@ -261,7 +267,7 @@ impl Statement {
 
     fn parse_name_declaration<F: FnOnce(String) -> Statement>(
         file_info: &FileInfo,
-        buffer: (&str, Position),
+        buffer: Buffer,
         valid_char_regex: &Regex,
         keyword: &str,
         return_value: F,
@@ -295,11 +301,7 @@ impl Statement {
         Ok(return_value(argument.to_string()))
     }
 
-    fn parse_end(
-        file_info: &FileInfo,
-        number: Number,
-        buffer: (&str, Position),
-    ) -> AResult<Statement> {
+    fn parse_end(file_info: &FileInfo, number: Number, buffer: Buffer) -> AResult<Statement> {
         assert!(buffer.0.contains(Keyword::END_STR));
         ensure!(
             buffer.0.ends_with(';'),
@@ -347,7 +349,7 @@ impl Statement {
 
     fn parse_transformation<T>(
         file_info: &FileInfo,
-        buffer: (&str, Position),
+        buffer: Buffer,
         numbers: NumberSet,
         arguments: &[&str],
         entities: &mut HashMap<String, Entity>,
@@ -422,13 +424,52 @@ impl Statement {
             })?)
         }
     }
+
+    fn parse_spawn(
+        info: &FileInfo,
+        buffer: Buffer,
+        numbers: NumberSet,
+        arguments: &[&str],
+    ) -> AResult<Statement> {
+        todo!()
+    }
+
+    fn parse_item(
+        info: &FileInfo,
+        buffer: Buffer,
+        numbers: NumberSet,
+        arguments: &[&str],
+    ) -> AResult<Statement> {
+        todo!()
+    }
+
+    fn parse_block(
+        info: &FileInfo,
+        buffer: Buffer,
+        numbers: NumberSet,
+        arguments: &[&str],
+    ) -> AResult<Statement> {
+        todo!()
+    }
+
+    fn parse_text(
+        info: &FileInfo,
+        buffer: Buffer,
+        numbers: NumberSet,
+        arguments: &[&str],
+    ) -> AResult<Statement> {
+        todo!()
+    }
 }
 
 enum Keyword {
     Translate,
     Rotate,
     Scale,
-    //Spawn,
+    Spawn,
+    Item,
+    Block,
+    Text,
 }
 impl Keyword {
     pub const OBJECT_STR: &'static str = "object";
@@ -439,13 +480,17 @@ impl FromStr for Keyword {
     type Err = ErrorType;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "translate" | "move" | "m" => Ok(Self::Translate),
-            "rotate" | "turn" | "r" => Ok(Self::Rotate),
-            "scale" | "size" | "s" => Ok(Self::Scale),
-            //"spawn" => Ok(Self::Spawn),
-            _ => Err(ErrorType::InvalidKeyword(s.to_string())),
-        }
+        let result = match s.to_lowercase().as_str() {
+            "translate" | "move" | "m" => Self::Translate,
+            "rotate" | "turn" | "r" => Self::Rotate,
+            "scale" | "size" | "s" => Self::Scale,
+            "spawn" => Self::Spawn,
+            "item" => Self::Item,
+            "block" => Self::Block,
+            "text" => Self::Text,
+            _ => return Err(ErrorType::InvalidKeyword(s.to_string())),
+        };
+        Ok(result)
     }
 }
 
