@@ -1,3 +1,58 @@
+use std::{fs, path::Path};
+
+use crate::{
+    compiled::{self, CompiledFile},
+    errors::GenericError,
+    objects::TrackedChar,
+    statements::{FileInfo, Program},
+};
+
+pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
+    let contents = fs::read_to_string(file_path)
+        .map_err(|err| GenericError::InvalidPath(err.to_string()))?
+        .replace('\r', "");
+    let mut iterator = to_tracked_iter(&contents);
+    let program = Program::parse_from_file(
+        FileInfo::new(
+            file_path.to_string(),
+            TrackedChar::new(
+                contents.chars().filter(|&c| c == '\n').count(),
+                contents.lines().last().map(|c| c.len()).unwrap_or(0),
+                contents.chars().last().unwrap_or('\n'),
+            ),
+        ),
+        &mut iterator,
+    );
+
+    // println!("{program:#?}");
+    Ok(compiled::program(
+        program?,
+        &get_file_name(file_path)?,
+        file_path,
+    ))
+}
+
+pub fn to_tracked_iter(string: &str) -> impl Iterator<Item = TrackedChar> + '_ {
+    string
+        .split_inclusive('\n')
+        .enumerate()
+        .flat_map(|(line_number, line)| {
+            line.chars()
+                .enumerate()
+                .map(move |(column_number, character)| {
+                    TrackedChar::new(line_number, column_number, character)
+                })
+        })
+}
+
+fn get_file_name(path: &str) -> anyhow::Result<String> {
+    let file_name = Path::new(path)
+        .file_stem()
+        .ok_or(GenericError::FileNotExist(path.to_string()))?
+        .to_string_lossy();
+    Ok(file_name.into_owned())
+}
+/*
 use anyhow::{bail, Context};
 use anyhow::{ensure, Result as AResult};
 use regex::Regex;
@@ -10,6 +65,7 @@ use std::str::FromStr;
 use crate::errors::{CompileError, NumberSetError};
 use crate::objects::Transformation;
 use crate::{collect_errors, compiled};
+
 
 macro_rules! next_element {
     ($elements:expr, $statement:expr, $current:expr) => {
@@ -376,3 +432,4 @@ fn parse_coordinate(coordinate: &str, current: f32) -> AResult<f32> {
             .map_err(|err| CompileError::InvalidCoordinate(coordinate.clone(), err).into())
     }
 }
+ */

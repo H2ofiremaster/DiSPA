@@ -3,23 +3,34 @@ anim atest;
 # @ is delay, % is duration.
 # This is a comment, by the way.
 
-@0 %20 move e1 0 1 0;
-@10 {
-    %21 move e1 ~ ~1 ~;
-    %22 turn e1 90 0 0;
-}
-@20 {
-    %23 move e1 1 0 0; 
-    %24 turn e1 0 90 0;
+move e1 1 0 0;
+@10 move e1 0 1 0;
+@20 %10 move e1 0 0 1;
+
+@30 {
+    turn e1 90 0 0;
+    @40 turn e1 0 90 0;
+    @50 %20 turn e1 0 0 90;
 }
 
-@30 %20 {
-    move e1 ~1 ~ ~;
-    %10 {
-        move e1 ~ ~ ~1;
+@60 %30 {
+    size e1 2 1 1;
+    @70 size e1 1 2 1;
+    @80 %40 size e1 1 2 1;
+    @90 {
+        move e1 ~1 ~ ~;
         turn e1 ~90 ~ ~;
-        %100 size e1 2 2 2;
+        size e1 ~1 ~ ~;
     }
-    size e1 2 2 2;
+    %50 {
+        move e1 0 ~1 0;
+        turn e1 0 ~90 0;
+        size e1 1 ~1 1;
+    }
+    @100 %60 {
+        move e1 ~ ~ 1;
+        turn e1 ~ ~ 90;
+        size e1 ~ ~ 2;
+    }
 }
-@100 end;
+@110 end;
