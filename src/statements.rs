@@ -510,16 +510,23 @@ fn get_buffer_string<I: Iterator<Item = TrackedChar>>(
     iter: &mut I,
     seperators: &[char],
 ) -> (String, Position) {
-    let mut is_comment: bool = false;
+    let mut commented: bool = false;
+    let mut escaped: bool = false;
+    let mut quoted: bool = false;
     iter.filter(|c| {
-        is_comment = match c.character {
+        commented = match c.character {
             '#' => true,
             '\n' => false,
-            _ => is_comment,
+            _ => commented,
         };
-        !is_comment
+        !commented
     })
-    .take_while_inclusive(|c| !seperators.contains(&c.character))
+    .take_while_inclusive(|c| {
+        if is_quoted(c, &mut escaped, &mut quoted) {
+            return true;
+        }
+        !seperators.contains(&c.character)
+    })
     .fold((String::new(), Position::default()), |mut acc, c| {
         if acc.0.is_empty() {
             acc.1 = c.position;
@@ -527,6 +534,24 @@ fn get_buffer_string<I: Iterator<Item = TrackedChar>>(
         acc.0.push(c.character);
         acc
     })
+}
+
+fn is_quoted(c: &TrackedChar, escaped: &mut bool, quoted: &mut bool) -> bool {
+    match quoted {
+        true => {
+            if c.character == '\'' {
+                *quoted = false;
+            }
+        }
+        false => {
+            if *escaped {
+                *escaped = false;
+            } else if c.character == '\'' {
+                *quoted = true;
+            }
+        }
+    }
+    *quoted
 }
 
 #[cfg(test)]
