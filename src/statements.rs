@@ -156,10 +156,6 @@ impl Statement {
             ))?;
 
             if !NumberType::has_prefix(second_word) {
-                if second_word.contains(Keyword::END_STR) {
-                    return Self::parse_end(file_info, first_number, buffer);
-                }
-
                 keyword = second_word;
                 numbers = match first_number.number_type {
                     NumberType::Delay => {
@@ -204,6 +200,11 @@ impl Statement {
                 ErrorType::IncorrectSeparator(buffer.0.to_string(), ';')
             )
         );
+
+        if keyword.contains(Keyword::END_STR) {
+            return Self::parse_end(file_info, numbers.delay, buffer);
+        }
+
         match keyword
             .parse()
             .map_err(|err| CompileError::new(file_info, buffer.1, err))?
@@ -217,10 +218,10 @@ impl Statement {
             Keyword::Scale => Self::parse_transformation::<Scale>(
                 file_info, buffer, numbers, &arguments, entities,
             ),
-            Keyword::Spawn => todo!(),
-            Keyword::Item => todo!(),
-            Keyword::Block => todo!(),
-            Keyword::Text => todo!(),
+            Keyword::Spawn => Self::parse_spawn(file_info, buffer, numbers, &arguments),
+            Keyword::Item => Self::parse_item(file_info, buffer, numbers, &arguments),
+            Keyword::Block => Self::parse_block(file_info, buffer, numbers, &arguments),
+            Keyword::Text => Self::parse_text(file_info, buffer, numbers, &arguments),
         }
     }
 
@@ -301,7 +302,7 @@ impl Statement {
         Ok(return_value(argument.to_string()))
     }
 
-    fn parse_end(file_info: &FileInfo, number: Number, buffer: Buffer) -> AResult<Statement> {
+    fn parse_end(file_info: &FileInfo, number: u32, buffer: Buffer) -> AResult<Statement> {
         assert!(buffer.0.contains(Keyword::END_STR));
         ensure!(
             buffer.0.ends_with(';'),
@@ -309,14 +310,6 @@ impl Statement {
                 file_info,
                 buffer.1,
                 ErrorType::IncorrectSeparator(buffer.0.to_string(), ';')
-            )
-        );
-        ensure!(
-            number.number_type == NumberType::Delay,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectNumberType(number, NumberType::Delay)
             )
         );
         let words: Vec<_> = buffer.0.split(' ').collect();
@@ -344,7 +337,7 @@ impl Statement {
                 )
             )
         );
-        Ok(Self::End(number.value))
+        Ok(Self::End(number))
     }
 
     fn parse_transformation<T>(
