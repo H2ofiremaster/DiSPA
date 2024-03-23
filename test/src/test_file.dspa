@@ -3,6 +3,8 @@ anim atest;
 # @ is delay, % is duration.
 # This is a comment, by the way.
 
+spawn 
+
 move e1 1 0 0;
 @10 move e1 0 1 0;
 @20 %10 move e1 0 0 1;

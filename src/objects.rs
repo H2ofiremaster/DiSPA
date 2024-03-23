@@ -312,6 +312,13 @@ impl NumberSet {
             _ => Err(ErrorType::DuplicateNumberType(value_1.number_type)),
         }
     }
+
+    pub fn new_with_default(number: Number, default: NumberSet) -> Self {
+        match number.number_type {
+            NumberType::Delay => Self::new(number.value, default.duration),
+            NumberType::Duration => Self::new(default.delay, number.value),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

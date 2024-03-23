@@ -1,4 +1,7 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::HashMap,
+    str::{FromStr, Split},
+};
 
 use crate::{
     errors::{CompileError, CompileErrorType as ErrorType, GenericError},
@@ -134,51 +137,8 @@ impl Statement {
         }
         let mut words = buffer.0.split(' ');
 
-        let first_word = words.next().ok_or(CompileError::new(
-            file_info,
-            buffer.1,
-            ErrorType::LineEmpty(buffer.0.to_string()),
-        ))?;
-        let keyword: &str;
-        let numbers: NumberSet;
-        if !NumberType::has_prefix(first_word) {
-            keyword = first_word;
-            numbers = current_numbers
-        } else {
-            let first_number: Number = first_word
-                .parse()
-                .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
-
-            let second_word = words.next().ok_or(CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::LineEmpty(buffer.0.to_string()),
-            ))?;
-
-            if !NumberType::has_prefix(second_word) {
-                keyword = second_word;
-                numbers = match first_number.number_type {
-                    NumberType::Delay => {
-                        NumberSet::new(first_number.value, current_numbers.duration)
-                    }
-                    NumberType::Duration => {
-                        NumberSet::new(current_numbers.delay, first_number.value)
-                    }
-                }
-            } else {
-                let second_number: Number = second_word
-                    .parse()
-                    .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
-
-                numbers = NumberSet::new_unordered(first_number, second_number)
-                    .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
-                keyword = words.next().ok_or(CompileError::new(
-                    file_info,
-                    buffer.1,
-                    ErrorType::LineEmpty(buffer.0.to_string()),
-                ))?;
-            }
-        }
+        let (keyword, numbers) =
+            Self::parse_numbers(&mut words, file_info, &buffer, current_numbers)?;
 
         let arguments: Vec<_> = words
             .map(|w| {
@@ -223,6 +183,48 @@ impl Statement {
             Keyword::Block => Self::parse_block(file_info, buffer, numbers, &arguments),
             Keyword::Text => Self::parse_text(file_info, buffer, numbers, &arguments),
         }
+    }
+
+    fn parse_numbers(
+        words: &mut Split<'_, char>,
+        file_info: &FileInfo,
+        buffer: &Buffer,
+        current_numbers: NumberSet,
+    ) -> AResult<(String, NumberSet)> {
+        let first_word = words.next().ok_or(CompileError::new(
+            file_info,
+            buffer.1,
+            ErrorType::LineEmpty(buffer.0.to_string()),
+        ))?;
+        if !NumberType::has_prefix(first_word) {
+            return Ok((first_word.to_string(), current_numbers));
+        }
+
+        let first_number: Number = first_word
+            .parse()
+            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+
+        let second_word = words.next().ok_or(CompileError::new(
+            file_info,
+            buffer.1,
+            ErrorType::LineEmpty(buffer.0.to_string()),
+        ))?;
+        if !NumberType::has_prefix(second_word) {
+            let numbers = NumberSet::new_with_default(first_number, current_numbers);
+            return Ok((second_word.to_string(), numbers));
+        }
+        let second_number: Number = second_word
+            .parse()
+            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+
+        let numbers = NumberSet::new_unordered(first_number, second_number)
+            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+        let keyword = words.next().ok_or(CompileError::new(
+            file_info,
+            buffer.1,
+            ErrorType::LineEmpty(buffer.0.to_string()),
+        ))?;
+        Ok((keyword.to_string(), numbers))
     }
 
     fn parse_block_start(
