@@ -1,4 +1,8 @@
-use std::{fmt::Display, ops::Add, str::FromStr};
+use std::{
+    fmt::Display,
+    ops::{Add, Sub},
+    str::FromStr,
+};
 
 use quaternion_core::{RotationSequence, RotationType};
 use regex::Regex;
@@ -179,6 +183,8 @@ pub struct Entity {
     pub transformation: Transformation,
 }
 impl Entity {
+    pub const TYPES: [&'static str; 3] = ["block_display", "item_display", "text_display"];
+
     pub fn new(value: String) -> Self {
         Self {
             name: value,
@@ -241,6 +247,16 @@ impl Display for Position {
         write!(f, "{}:{}", self.line, self.column)
     }
 }
+impl Sub<usize> for Position {
+    type Output = Self;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        Self {
+            line: self.line,
+            column: self.column - rhs,
+        }
+    }
+}
 
 pub struct Regexes {
     pub comment: Regex,
@@ -259,8 +275,6 @@ impl Regexes {
         })
     }
 }
-
-// enum EntityType {}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Number {

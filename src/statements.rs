@@ -156,10 +156,11 @@ impl Statement {
             buffer.0.ends_with(';'),
             CompileError::new(
                 file_info,
-                buffer.1,
+                buffer.1 + buffer.0.len(),
                 ErrorType::IncorrectSeparator(buffer.0.to_string(), ';')
             )
         );
+        let buffer: Buffer = (buffer.0, buffer.1 + keyword.len());
 
         if keyword.contains(Keyword::END_STR) {
             return Self::parse_end(file_info, numbers.delay, buffer);
@@ -167,7 +168,7 @@ impl Statement {
 
         match keyword
             .parse()
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?
+            .map_err(|err| CompileError::new(file_info, buffer.1 - keyword.len(), err))?
         {
             Keyword::Translate => Self::parse_transformation::<Translation>(
                 file_info, buffer, numbers, &arguments, entities,
@@ -178,7 +179,9 @@ impl Statement {
             Keyword::Scale => Self::parse_transformation::<Scale>(
                 file_info, buffer, numbers, &arguments, entities,
             ),
-            Keyword::Spawn => Self::parse_spawn(file_info, buffer, numbers, &arguments),
+            Keyword::Spawn => {
+                Self::parse_spawn(file_info, buffer, numbers.delay, &arguments, entities)
+            }
             Keyword::Item => Self::parse_item(file_info, buffer, numbers, &arguments),
             Keyword::Block => Self::parse_block(file_info, buffer, numbers, &arguments),
             Keyword::Text => Self::parse_text(file_info, buffer, numbers, &arguments),
@@ -360,7 +363,7 @@ impl Statement {
                 ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 4, arguments.len())
             )
         );
-        let entity_name = arguments[0].to_owned();
+        let entity_name = arguments[0].to_string();
         let entity = entities
             .entry(entity_name.clone())
             .or_insert(Entity::new(entity_name));
@@ -423,9 +426,27 @@ impl Statement {
     fn parse_spawn(
         info: &FileInfo,
         buffer: Buffer,
-        numbers: NumberSet,
+        delay: u32,
         arguments: &[&str],
+        entities: &mut HashMap<String, Entity>,
     ) -> AResult<Statement> {
+        ensure!(
+            arguments.len() >= 3,
+            CompileError::new(
+                info,
+                buffer.1,
+                ErrorType::IncorrectArgumentCount(buffer.1.to_string(), 4, arguments.len())
+            )
+        );
+        ensure!(
+            Entity::TYPES.contains(&arguments[0]),
+            CompileError::new(
+                info,
+                buffer.1,
+                ErrorType::InvalidEntityType(arguments[0].to_string())
+            )
+        );
+        if arguments.len() == 3 {}
         todo!()
     }
 
@@ -494,7 +515,7 @@ pub enum KeywordStatement {
     Translate(Translation),
     Rotate(Rotation),
     Scale(Scale),
-    //Spawn(Entity, EntityType),
+    SpawnRelative(Entity, (u32, u32, u32)),
 }
 
 fn remove_last_char(s: &str) -> &str {

@@ -1,9 +1,18 @@
+# object <name>;
+# anim <name>;
+# @ % move <entity> <x> <y> <z>;
+# @ % turn <entity> <yaw> <pitch> <roll>;
+# @ % size <entity> <x> <y> <z>;
+# @ spawn <type> <new_entity> <source_entity> [offset_x] [offset_y] [offset_z];
+# @ end;
+
 object dtest;
 anim atest;
 # @ is delay, % is duration.
 # This is a comment, by the way.
 
-spawn 
+spawn item_display s2 e1; 
+spawn item_display s2 e1 1 0 0; 
 
 move e1 1 0 0;
 @10 move e1 0 1 0;

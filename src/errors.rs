@@ -1,12 +1,12 @@
 use std::{
-    fmt::Display,
+    fmt::{format, Display},
     num::{ParseFloatError, ParseIntError},
 };
 
 use thiserror::Error;
 
 use crate::{
-    objects::{Number, NumberType, Position},
+    objects::{Entity, Number, NumberType, Position},
     statements::FileInfo,
 };
 
@@ -57,6 +57,7 @@ pub enum CompileErrorType {
     DuplicateNumberType(NumberType),
     IncorrectSeparator(String, char),
     InvalidCoordinate(String, ParseFloatError),
+    InvalidEntityType(String),
 }
 impl Display for CompileErrorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -117,6 +118,13 @@ impl Display for CompileErrorType {
             }
             Self::InvalidCoordinate(coordinate, error) => {
                 write!(f, "Coordinate '{coordinate}' is invalid: {error}")
+            }
+            Self::InvalidEntityType(argument) => {
+                write!(
+                    f,
+                    "Entity type '{argument}' is invalid. Expected one of: [{}]",
+                    Entity::TYPES.map(|s| format!("\"{s}\"")).join(", ")
+                )
             }
         }
     }
