@@ -1,12 +1,12 @@
 use std::{
-    fmt::{format, Display},
+    fmt::Display,
     num::{ParseFloatError, ParseIntError},
 };
 
 use thiserror::Error;
 
 use crate::{
-    objects::{Entity, Number, NumberType, Position},
+    objects::{EntityType, Number, NumberType, Position},
     statements::FileInfo,
 };
 
@@ -123,7 +123,7 @@ impl Display for CompileErrorType {
                 write!(
                     f,
                     "Entity type '{argument}' is invalid. Expected one of: [{}]",
-                    Entity::TYPES.map(|s| format!("\"{s}\"")).join(", ")
+                    EntityType::TYPES.map(|s| format!("\"{s}\"")).join(", ")
                 )
             }
         }

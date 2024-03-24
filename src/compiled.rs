@@ -32,12 +32,12 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
                     KeywordStatement::Translate(t) => t.compile(),
                     KeywordStatement::Rotate(r) => r.compile(),
                     KeywordStatement::Scale(s) => s.compile(),
-                    KeywordStatement::SpawnRelative(_, _) => todo!(),
+                    KeywordStatement::Spawn(_name, _offset) => todo!(),
                 };
                 Some(transformation(
                     &object_name,
                     &animation_name,
-                    &entity.name,
+                    &entity,
                     numbers,
                     &compiled_transformation,
                 ))

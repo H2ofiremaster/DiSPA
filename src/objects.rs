@@ -177,20 +177,9 @@ impl Transformation {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Entity {
-    pub name: String,
-    pub transformation: Transformation,
-}
-impl Entity {
+pub enum EntityType {}
+impl EntityType {
     pub const TYPES: [&'static str; 3] = ["block_display", "item_display", "text_display"];
-
-    pub fn new(value: String) -> Self {
-        Self {
-            name: value,
-            transformation: Transformation::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
