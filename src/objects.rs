@@ -177,9 +177,21 @@ impl Transformation {
     }
 }
 
-pub enum EntityType {}
-impl EntityType {
+#[derive(Debug, Clone)]
+pub struct Entity(String);
+impl Entity {
     pub const TYPES: [&'static str; 3] = ["block_display", "item_display", "text_display"];
+
+    pub fn new(string: String, validator: &Regex) -> Result<Self, ErrorType> {
+        if validator.is_match(&string) {
+            Ok(Self(string))
+        } else {
+            Err(ErrorType::InvalidEntityName(string))
+        }
+    }
+    pub fn name(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -249,18 +261,18 @@ impl Sub<usize> for Position {
 
 pub struct Regexes {
     pub comment: Regex,
-    pub valid_character: Regex,
+    pub name: Regex,
 }
 impl Regexes {
     const COMMENT_REGEX: &'static str = r"#.*?\n";
-    const VALID_CHARACTER_REGEX: &'static str = r"^[A-Za-z0-9_\-]*$";
+    const NAME: &'static str = r"^[A-Za-z0-9_\-]*$";
 
     pub fn new() -> anyhow::Result<Self> {
         Ok(Regexes {
             comment: Regex::new(Self::COMMENT_REGEX)
                 .map_err(|err| GenericError::InvalidRegex(Self::COMMENT_REGEX, err))?,
-            valid_character: Regex::new(Self::VALID_CHARACTER_REGEX)
-                .map_err(|err| GenericError::InvalidRegex(Self::VALID_CHARACTER_REGEX, err))?,
+            name: Regex::new(Self::NAME)
+                .map_err(|err| GenericError::InvalidRegex(Self::NAME, err))?,
         })
     }
 }

@@ -73,12 +73,12 @@ pub enum Statement {
     AnimationName(String),
     Block(NumberSet),
     BlockEnd,
-    Transform(NumberSet, String, TransformStatement),
+    Transform(NumberSet, Entity, TransformStatement),
     Spawn {
         delay: u32,
-        source: String,
+        source: Entity,
         entity_type: String,
-        new: String,
+        new: Entity,
         offset: Vector,
     },
     End(u32),
@@ -114,7 +114,7 @@ impl Statement {
                 return Self::parse_name_declaration(
                     file_info,
                     buffer,
-                    &regexes.valid_character,
+                    &regexes.name,
                     Keyword::OBJECT_STR,
                     Self::ObjectName,
                 );
@@ -123,7 +123,7 @@ impl Statement {
                 return Self::parse_name_declaration(
                     file_info,
                     buffer,
-                    &regexes.valid_character,
+                    &regexes.name,
                     Keyword::ANIMATION_STR,
                     Self::AnimationName,
                 );
@@ -165,16 +165,30 @@ impl Statement {
             .parse()
             .map_err(|err| CompileError::new(file_info, buffer.1 - keyword.len(), err))?
         {
-            Keyword::Translate => {
-                Self::parse_transformation::<Translation>(file_info, buffer, numbers, &arguments)
+            Keyword::Translate => Self::parse_transformation::<Translation>(
+                file_info,
+                buffer,
+                numbers,
+                &arguments,
+                &regexes.name,
+            ),
+            Keyword::Rotate => Self::parse_transformation::<Rotation>(
+                file_info,
+                buffer,
+                numbers,
+                &arguments,
+                &regexes.name,
+            ),
+            Keyword::Scale => Self::parse_transformation::<Scale>(
+                file_info,
+                buffer,
+                numbers,
+                &arguments,
+                &regexes.name,
+            ),
+            Keyword::Spawn => {
+                Self::parse_spawn(file_info, buffer, numbers.delay, &arguments, &regexes.name)
             }
-            Keyword::Rotate => {
-                Self::parse_transformation::<Rotation>(file_info, buffer, numbers, &arguments)
-            }
-            Keyword::Scale => {
-                Self::parse_transformation::<Scale>(file_info, buffer, numbers, &arguments)
-            }
-            Keyword::Spawn => Self::parse_spawn(file_info, buffer, numbers.delay, &arguments),
             Keyword::Item => Self::parse_item(file_info, buffer, numbers, &arguments),
             Keyword::Block => Self::parse_block(file_info, buffer, numbers, &arguments),
             Keyword::Text => Self::parse_text(file_info, buffer, numbers, &arguments),
@@ -187,39 +201,35 @@ impl Statement {
         buffer: &Buffer,
         current_numbers: NumberSet,
     ) -> AResult<(String, NumberSet)> {
-        let first_word = words.next().ok_or(CompileError::new(
-            file_info,
-            buffer.1,
-            ErrorType::LineEmpty(buffer.0.to_string()),
-        ))?;
+        let mut next_word = || {
+            words.next().ok_or(CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::LineEmpty(buffer.0.to_string()),
+            ))
+        };
+        let get_number = |word: &str| {
+            word.parse::<Number>()
+                .map_err(|err| CompileError::new(file_info, buffer.1, err))
+        };
+
+        let first_word: &str = next_word()?;
         if !NumberType::has_prefix(first_word) {
             return Ok((first_word.to_string(), current_numbers));
         }
 
-        let first_number: Number = first_word
-            .parse()
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
-
-        let second_word = words.next().ok_or(CompileError::new(
-            file_info,
-            buffer.1,
-            ErrorType::LineEmpty(buffer.0.to_string()),
-        ))?;
+        let first_number: Number = get_number(first_word)?;
+        let second_word: &str = next_word()?;
         if !NumberType::has_prefix(second_word) {
             let numbers = NumberSet::new_with_default(first_number, current_numbers);
             return Ok((second_word.to_string(), numbers));
         }
-        let second_number: Number = second_word
-            .parse()
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
 
+        let second_number: Number = get_number(second_word)?;
         let numbers = NumberSet::new_unordered(first_number, second_number)
             .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
-        let keyword = words.next().ok_or(CompileError::new(
-            file_info,
-            buffer.1,
-            ErrorType::LineEmpty(buffer.0.to_string()),
-        ))?;
+        let keyword = next_word()?;
+
         Ok((keyword.to_string(), numbers))
     }
 
@@ -267,7 +277,7 @@ impl Statement {
     fn parse_name_declaration<F: FnOnce(String) -> Statement>(
         file_info: &FileInfo,
         buffer: Buffer,
-        valid_char_regex: &Regex,
+        name: &Regex,
         keyword: &str,
         return_value: F,
     ) -> AResult<Statement> {
@@ -289,7 +299,7 @@ impl Statement {
 
         ensure!(keyword == keyword);
         ensure!(
-            valid_char_regex.is_match(argument),
+            name.is_match(argument),
             CompileError::new(
                 file_info,
                 buffer.1,
@@ -343,6 +353,7 @@ impl Statement {
         buffer: Buffer,
         numbers: NumberSet,
         arguments: &[&str],
+        name_regex: &Regex,
     ) -> AResult<Statement>
     where
         T: SimpleTransformation + From<Vector>,
@@ -355,17 +366,18 @@ impl Statement {
                 ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 4, arguments.len())
             )
         );
-
+        let entity = Entity::new(arguments[0].to_string(), name_regex)
+            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
         let coordinates: Vector = (
             Self::parse_coordinate(file_info, buffer.1, arguments[1])?,
             Self::parse_coordinate(file_info, buffer.1, arguments[2])?,
             Self::parse_coordinate(file_info, buffer.1, arguments[3])?,
         );
-        let t: T = T::from(coordinates);
+        let transformation: T = T::from(coordinates);
         Ok(Self::Transform(
             numbers,
-            arguments[0].to_string(),
-            t.to_statement(),
+            entity,
+            transformation.to_statement(),
         ))
     }
 
@@ -385,29 +397,81 @@ impl Statement {
     }
 
     fn parse_spawn(
-        info: &FileInfo,
+        file_info: &FileInfo,
         buffer: Buffer,
         delay: u32,
         arguments: &[&str],
+        name_regex: &Regex,
     ) -> AResult<Statement> {
         ensure!(
             arguments.len() >= 3,
             CompileError::new(
-                info,
+                file_info,
                 buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.1.to_string(), 4, arguments.len())
+                ErrorType::IncorrectArgumentCount(buffer.1.to_string(), 3, arguments.len())
             )
         );
         ensure!(
-            EntityType::TYPES.contains(&arguments[0]),
+            Entity::TYPES.contains(&arguments[0]),
             CompileError::new(
-                info,
+                file_info,
                 buffer.1,
                 ErrorType::InvalidEntityType(arguments[0].to_string())
             )
         );
-        if arguments.len() == 3 {}
-        todo!()
+        let entity_type = arguments[0].to_string();
+
+        let new_entity = Entity::new(arguments[1].to_string(), name_regex)
+            .map_err(|err| CompileError::new(file_info, buffer.1 + arguments[0].len(), err))?;
+        let source_entity: Entity =
+            Entity::new(arguments[2].to_string(), name_regex).map_err(|err| {
+                CompileError::new(
+                    file_info,
+                    buffer.1 + (arguments[0..1].join(" ").len() + 1),
+                    err,
+                )
+            })?;
+        if arguments.len() == 3 {
+            return Ok(Self::Spawn {
+                delay,
+                source: source_entity,
+                entity_type,
+                new: new_entity,
+                offset: (0.0, 0.0, 0.0),
+            });
+        }
+        ensure!(
+            arguments.len() == 6,
+            CompileError::new(
+                file_info,
+                buffer.1 + buffer.0.len(),
+                ErrorType::IncorrectArgumentCount(buffer.1.to_string(), 6, arguments.len())
+            )
+        );
+        let coordinates: Vector = (
+            Self::parse_coordinate(
+                file_info,
+                buffer.1 + arguments[0..2].join(" ").len(),
+                arguments[3],
+            )?,
+            Self::parse_coordinate(
+                file_info,
+                buffer.1 + arguments[0..3].join(" ").len(),
+                arguments[4],
+            )?,
+            Self::parse_coordinate(
+                file_info,
+                buffer.1 + arguments[0..4].join(" ").len(),
+                arguments[5],
+            )?,
+        );
+        Ok(Self::Spawn {
+            delay,
+            source: source_entity,
+            entity_type,
+            new: new_entity,
+            offset: coordinates,
+        })
     }
 
     fn parse_item(

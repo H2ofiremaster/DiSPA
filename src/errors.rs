@@ -6,7 +6,7 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    objects::{EntityType, Number, NumberType, Position},
+    objects::{Entity, NumberType, Position},
     statements::FileInfo,
 };
 
@@ -53,11 +53,11 @@ pub enum CompileErrorType {
     InvalidInt(String, ParseIntError),
     StringSectionEmpty(String),
     IncorrectArgumentCount(String, usize, usize),
-    IncorrectNumberType(Number, NumberType),
     DuplicateNumberType(NumberType),
     IncorrectSeparator(String, char),
     InvalidCoordinate(String, ParseFloatError),
     InvalidEntityType(String),
+    InvalidEntityName(String),
 }
 impl Display for CompileErrorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -98,12 +98,6 @@ impl Display for CompileErrorType {
                     "Incorrect number of arguments in '{statement}': Expected '{expected}', found '{found}'."
                 )
             }
-            Self::IncorrectNumberType(number, expected) => {
-                write!(
-                    f,
-                    "Number '{number}' is of incorrect type. Expected: '{expected}'."
-                )
-            }
             Self::DuplicateNumberType(number_type) => {
                 write!(
                     f,
@@ -123,8 +117,11 @@ impl Display for CompileErrorType {
                 write!(
                     f,
                     "Entity type '{argument}' is invalid. Expected one of: [{}]",
-                    EntityType::TYPES.map(|s| format!("\"{s}\"")).join(", ")
+                    Entity::TYPES.map(|s| format!("\"{s}\"")).join(", ")
                 )
+            }
+            Self::InvalidEntityName(name) => {
+                write!(f, "Entity name '{name}' contains invalid characters.")
             }
         }
     }

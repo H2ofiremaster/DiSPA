@@ -36,19 +36,27 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
                 Some(transformation(
                     &object_name,
                     &animation_name,
-                    &entity,
+                    entity.name(),
                     numbers,
                     &compiled_transformation,
                 ))
             }
             Statement::End(delay) => Some(reset(&object_name, &animation_name, delay)),
             Statement::Spawn {
-                delay: _,
-                source: _,
-                entity_type: _,
-                new: _,
-                offset: _,
-            } => todo!(),
+                delay,
+                source,
+                entity_type,
+                new,
+                offset,
+            } => Some(spawn(
+                &object_name,
+                &animation_name,
+                delay,
+                &entity_type,
+                new.name(),
+                source.name(),
+                offset,
+            )),
             Statement::Block(_) | Statement::BlockEnd | Statement::EndOfFile => None,
         })
         .join("\n");
@@ -61,7 +69,7 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
     }
 }
 
-pub fn transformation(
+fn transformation(
     object_name: &str,
     animation_name: &str,
     entity_name: &str,
@@ -76,7 +84,24 @@ pub fn transformation(
     )
 }
 
-pub fn reset(object_name: &str, animation_name: &str, delay: u32) -> String {
+fn spawn(
+    object_name: &str,
+    animation_name: &str,
+    delay: u32,
+    entity_type: &str,
+    new_entity_name: &str,
+    source_entity_name: &str,
+    offset: (f32, f32, f32),
+) -> String {
+    let (x, y, z) = offset;
+    format!(
+        "execute as @e[tag={object_name}-{source_entity_name}] at @s \
+        if score ${object_name}-{animation_name} timer matches {delay} run \
+        summon {entity_type} ~{x}, ~{y}, ~{z} {{Tags:[\"{object_name}-{new_entity_name}\"]}}"
+    )
+}
+
+fn reset(object_name: &str, animation_name: &str, delay: u32) -> String {
     format!(
         "\n\
         execute if score ${object_name}-{animation_name} timer matches {delay}.. run scoreboard players set ${object_name}-{animation_name} flags 0\n\
@@ -85,7 +110,7 @@ pub fn reset(object_name: &str, animation_name: &str, delay: u32) -> String {
     )
 }
 
-pub fn increment(object_name: &str, animation_name: &str) -> String {
+fn increment(object_name: &str, animation_name: &str) -> String {
     format!("scoreboard players add ${object_name}-{animation_name} timer 1")
 }
 
