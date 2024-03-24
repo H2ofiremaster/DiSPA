@@ -2,7 +2,7 @@ use itertools::Itertools;
 
 use crate::{
     objects::NumberSet,
-    statements::{KeywordStatement, Program, Statement},
+    statements::{Program, Statement, TransformStatement},
 };
 
 pub struct CompiledFile {
@@ -27,12 +27,11 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
                 animation_name = name;
                 None
             }
-            Statement::Keyword(numbers, entity, keyword) => {
+            Statement::Transform(numbers, entity, keyword) => {
                 let compiled_transformation = match keyword {
-                    KeywordStatement::Translate(t) => t.compile(),
-                    KeywordStatement::Rotate(r) => r.compile(),
-                    KeywordStatement::Scale(s) => s.compile(),
-                    KeywordStatement::Spawn(_name, _offset) => todo!(),
+                    TransformStatement::Translate(t) => t.compile(),
+                    TransformStatement::Rotate(r) => r.compile(),
+                    TransformStatement::Scale(s) => s.compile(),
                 };
                 Some(transformation(
                     &object_name,
@@ -43,7 +42,14 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
                 ))
             }
             Statement::End(delay) => Some(reset(&object_name, &animation_name, delay)),
-            _ => None,
+            Statement::Spawn {
+                delay: _,
+                source: _,
+                entity_type: _,
+                new: _,
+                offset: _,
+            } => todo!(),
+            Statement::Block(_) | Statement::BlockEnd | Statement::EndOfFile => None,
         })
         .join("\n");
 

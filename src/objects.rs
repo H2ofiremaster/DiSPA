@@ -9,11 +9,11 @@ use regex::Regex;
 
 use crate::{
     errors::{CompileErrorType as ErrorType, GenericError},
-    statements::KeywordStatement,
+    statements::TransformStatement,
 };
 
 pub trait SimpleTransformation {
-    fn to_statement(self) -> KeywordStatement;
+    fn to_statement(self) -> TransformStatement;
 
     fn get_x(transformation: Transformation) -> f32;
     fn get_y(transformation: Transformation) -> f32;
@@ -43,8 +43,8 @@ impl From<(f32, f32, f32)> for Translation {
     }
 }
 impl SimpleTransformation for Translation {
-    fn to_statement(self) -> KeywordStatement {
-        KeywordStatement::Translate(self)
+    fn to_statement(self) -> TransformStatement {
+        TransformStatement::Translate(self)
     }
 
     fn get_x(transformation: Transformation) -> f32 {
@@ -99,8 +99,8 @@ impl From<(f32, f32, f32)> for Rotation {
     }
 }
 impl SimpleTransformation for Rotation {
-    fn to_statement(self) -> KeywordStatement {
-        KeywordStatement::Rotate(self)
+    fn to_statement(self) -> TransformStatement {
+        TransformStatement::Rotate(self)
     }
 
     fn get_x(transformation: Transformation) -> f32 {
@@ -139,8 +139,8 @@ impl From<(f32, f32, f32)> for Scale {
     }
 }
 impl SimpleTransformation for Scale {
-    fn to_statement(self) -> KeywordStatement {
-        KeywordStatement::Scale(self)
+    fn to_statement(self) -> TransformStatement {
+        TransformStatement::Scale(self)
     }
     fn get_x(transformation: Transformation) -> f32 {
         transformation.scale.x

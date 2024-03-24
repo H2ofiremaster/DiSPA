@@ -64,6 +64,7 @@ impl Program {
     }
 }
 
+pub type Vector = (f32, f32, f32);
 type Buffer<'a> = (&'a str, Position);
 
 #[derive(Debug, Clone)]
@@ -72,7 +73,14 @@ pub enum Statement {
     AnimationName(String),
     Block(NumberSet),
     BlockEnd,
-    Keyword(NumberSet, String, KeywordStatement),
+    Transform(NumberSet, String, TransformStatement),
+    Spawn {
+        delay: u32,
+        source: String,
+        entity_type: String,
+        new: String,
+        offset: Vector,
+    },
     End(u32),
     EndOfFile,
 }
@@ -337,7 +345,7 @@ impl Statement {
         arguments: &[&str],
     ) -> AResult<Statement>
     where
-        T: SimpleTransformation + From<(f32, f32, f32)>,
+        T: SimpleTransformation + From<Vector>,
     {
         ensure!(
             arguments.len() == 4,
@@ -348,13 +356,13 @@ impl Statement {
             )
         );
 
-        let coordinates: (f32, f32, f32) = (
+        let coordinates: Vector = (
             Self::parse_coordinate(file_info, buffer.1, arguments[1])?,
             Self::parse_coordinate(file_info, buffer.1, arguments[2])?,
             Self::parse_coordinate(file_info, buffer.1, arguments[3])?,
         );
         let t: T = T::from(coordinates);
-        Ok(Self::Keyword(
+        Ok(Self::Transform(
             numbers,
             arguments[0].to_string(),
             t.to_statement(),
@@ -463,11 +471,10 @@ impl FromStr for Keyword {
 }
 
 #[derive(Debug, Clone)]
-pub enum KeywordStatement {
+pub enum TransformStatement {
     Translate(Translation),
     Rotate(Rotation),
     Scale(Scale),
-    Spawn(String, (u32, u32, u32)),
 }
 
 fn remove_last_char(s: &str) -> &str {
