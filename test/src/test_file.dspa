@@ -12,6 +12,7 @@
 # block <entity> <block_state>
 # item <entity> <item>
 # text <entity> <text>
+# tp <entity> <x> <y> <z>
 object test_obj:test_anim
 
 move test 20 0 1 0
@@ -24,3 +25,4 @@ spawn test item_display test_item
 item test_item netherite_sword[minecraft:enchantment_glint_override=1]
 spawn test text_display test_text
 text test_text "This is some text"
+tp test_text 0 1 0

@@ -85,14 +85,11 @@ pub enum Statement {
     Translate(Entity, Translation, u32),
     Rotate(Entity, Rotation, u32),
     Scale(Entity, Scale, u32),
-    Spawn {
-        source: Entity,
-        entity_type: String,
-        new: Entity,
-    },
+    Spawn(Entity, String, Entity),
     Item(Entity, String),
     Block(Entity, BlockState),
     Text(Entity, String),
+    Teleport(Entity, f32, f32, f32),
     Empty,
 }
 impl Statement {
@@ -133,6 +130,7 @@ impl Statement {
             Keyword::Item => Self::parse_item(data),
             Keyword::Block => Self::parse_block(data),
             Keyword::Text => Self::parse_text(data),
+            Keyword::Teleport => Self::parse_teleport(data),
         }
     }
 
@@ -284,11 +282,11 @@ impl Statement {
         );
         let new_entity =
             Entity::new(arguments[2], name_regex).map_err(|err| data.compile_error(err))?;
-        Ok(Self::Spawn {
-            source: source_entity,
-            entity_type: entity_type.to_string(),
-            new: new_entity,
-        })
+        Ok(Self::Spawn(
+            source_entity,
+            entity_type.to_string(),
+            new_entity,
+        ))
     }
 
     fn parse_item(data: StatementData) -> AResult<Self> {
@@ -350,6 +348,28 @@ impl Statement {
         let text = arguments[1..].join(" ");
         Ok(Self::Text(entity, text))
     }
+
+    fn parse_teleport(data: StatementData) -> AResult<Self> {
+        let arguments = data.arguments;
+        let name_regex = data.name_regex;
+        arg_count!(== 4, data);
+
+        let entity =
+            Entity::new(arguments[0], name_regex).map_err(|err| data.compile_error(err))?;
+        let coords = arguments[1..=3]
+            .iter()
+            .map(|coord| {
+                coord
+                    .parse()
+                    .map_err(|err| data.compile_error(ErrorType::InvalidFloat(coord, err)))
+            })
+            .collect::<Result<Vec<f32>, _>>()?;
+        let [x, y, z] = coords.as_slice() else {
+            unreachable!()
+        };
+
+        Ok(Self::Teleport(entity, *x, *y, *z))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -363,6 +383,7 @@ enum Keyword {
     Item,
     Block,
     Text,
+    Teleport,
 }
 impl<'a> TryFrom<&'a str> for Keyword {
     type Error = ErrorType<'a>;
@@ -378,6 +399,7 @@ impl<'a> TryFrom<&'a str> for Keyword {
             "item" => Self::Item,
             "block" => Self::Block,
             "text" => Self::Text,
+            "teleport" | "tp" => Self::Teleport,
             _ => return Err(ErrorType::InvalidKeyword(value)),
         };
         Ok(result)

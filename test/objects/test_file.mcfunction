@@ -8,6 +8,7 @@ execute as @e[tag=test_obj,tag=test] at @s if score $test_obj-test_anim timer ma
 execute as @e[tag=test_obj,tag=test_item] if score $test_obj-test_anim timer matches 40 run item replace entity @s contents with netherite_sword[minecraft:enchantment_glint_override=1]
 execute as @e[tag=test_obj,tag=test] at @s if score $test_obj-test_anim timer matches 40 run summon text_display ~ ~ ~ {Tags:["test_obj","test_text"]}
 execute as @e[tag=test_obj,tag=test_text] if score $test_obj-test_anim timer matches 40 run data merge entity @s {text:'"This is some text"'}
+execute as @e[tag=test_obj,tag=test_text] at @s if score $test_obj-test_anim timer matches 40 run tp @s ~0 ~1 ~0
 
 execute if score $test_obj-test_anim timer matches 40.. run scoreboard players set $test_obj-test_anim flags 0
 execute if score $test_obj-test_anim timer matches 40.. run scoreboard players set $test_obj-test_anim timer -1

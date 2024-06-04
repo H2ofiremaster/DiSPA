@@ -9,22 +9,47 @@ pub struct CompiledFile {
     pub animation_name: String,
     pub contents: String,
 }
-
+struct ProgramData {
+    object_name: String,
+    animation_name: String,
+    delay: u32,
+}
+impl ProgramData {
+    fn new(file_name: &str) -> Self {
+        Self {
+            object_name: file_name.to_string(),
+            animation_name: file_name.to_string(),
+            delay: 0,
+        }
+    }
+    #[allow(clippy::needless_pass_by_value)]
+    fn execute_string(&self, entity_name: &str, command: String) -> String {
+        format!(
+            "execute as @e[tag={0},tag={entity_name}] if score ${0}-{1} timer matches {2} run {command}",
+            self.object_name, self.animation_name, self.delay
+        )
+    }
+    #[allow(clippy::needless_pass_by_value)]
+    fn execute_at_string(&self, entity_name: &str, command: String) -> String {
+        format!(
+            "execute as @e[tag={0},tag={entity_name}] at @s if score ${0}-{1} timer matches {2} run {command}",
+            self.object_name, self.animation_name, self.delay
+        )
+    }
+}
 pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFile {
-    let mut object_name: String = file_name.to_string();
-    let mut animation_name: String = file_name.to_string();
-    let mut delay = 0;
+    let mut data = ProgramData::new(file_name);
     let program_contents = program
         .statements
         .into_iter()
         .filter_map(|statement| match statement {
             Statement::ObjectName(object, animation) => {
-                object_name = object;
-                animation_name = animation;
+                data.object_name = object;
+                data.animation_name = animation;
                 None
             }
             Statement::Wait(duration) => {
-                delay += duration;
+                data.delay += duration;
                 None
             }
             Statement::Empty => None,
@@ -32,169 +57,54 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
             Statement::Translate(entity, translation, duration) => {
                 let compiled_transformation = translation.compile();
                 Some(transformation(
-                    &object_name,
-                    &animation_name,
+                    &data,
                     entity.name(),
-                    delay,
                     duration,
                     &compiled_transformation,
                 ))
             }
-            Statement::Rotate(entity, rotation, duration) => {
-                let compiled_transformation = rotation.compile();
-                Some(transformation(
-                    &object_name,
-                    &animation_name,
-                    entity.name(),
-                    delay,
-                    duration,
-                    &compiled_transformation,
-                ))
+            Statement::Rotate(entity, rotation, duration) => Some(transformation(
+                &data,
+                entity.name(),
+                duration,
+                &rotation.compile(),
+            )),
+            Statement::Scale(entity, scale, duration) => Some(transformation(
+                &data,
+                entity.name(),
+                duration,
+                &scale.compile(),
+            )),
+            Statement::Spawn(source, entity_type, new) => {
+                Some(spawn(&data, &entity_type, new.name(), source.name()))
             }
-            Statement::Scale(entity, scale, duration) => {
-                let compiled_transformation = scale.compile();
-                Some(transformation(
-                    &object_name,
-                    &animation_name,
-                    entity.name(),
-                    delay,
-                    duration,
-                    &compiled_transformation,
-                ))
+            Statement::Item(entity, item_definition) => {
+                Some(item(&data, entity.name(), &item_definition))
             }
-            Statement::Spawn {
-                source,
-                entity_type,
-                new,
-            } => Some(spawn(
-                &object_name,
-                &animation_name,
-                delay,
-                &entity_type,
-                new.name(),
-                source.name(),
-            )),
-            Statement::Item(entity, item_definition) => Some(item(
-                &object_name,
-                &animation_name,
-                entity.name(),
-                delay,
-                &item_definition,
-            )),
-            Statement::Block(entity, block_state) => Some(block(
-                &object_name,
-                &animation_name,
-                entity.name(),
-                delay,
-                &block_state.compile(),
-            )),
-            Statement::Text(entity, text_string) => Some(text(
-                &object_name,
-                &animation_name,
-                entity.name(),
-                delay,
-                &text_string,
-            )),
+            Statement::Block(entity, block_state) => {
+                Some(block(&data, entity.name(), &block_state.compile()))
+            }
+            Statement::Text(entity, text_string) => Some(text(&data, entity.name(), &text_string)),
+            Statement::Teleport(entity, x, y, z) => Some(teleport(&data, entity.name(), x, y, z)),
         })
         .join("\n");
 
     CompiledFile {
         path: file_path.to_string(),
-        object_name: object_name.to_string(),
-        animation_name: animation_name.to_string(),
+        object_name: data.object_name.to_string(),
+        animation_name: data.animation_name.to_string(),
         contents: format!(
             "{}\n{}\n{}\n{}",
             disclaimer(),
             program_contents,
-            reset(&object_name, &animation_name, delay),
-            increment(&object_name, &animation_name),
+            reset(&data),
+            increment(&data),
         ),
     }
 }
 
-fn item(
-    object_name: &str,
-    animation_name: &str,
-    entity_name: &str,
-    delay: u32,
-    item: &str,
-) -> String {
-    format!(
-        "execute as @e[tag={object_name},tag={entity_name}] \
-        if score ${object_name}-{animation_name} timer matches {delay} run \
-        item replace entity @s contents with {item}"
-    )
-}
-
-fn block(
-    object_name: &str,
-    animation_name: &str,
-    entity_name: &str,
-    delay: u32,
-    block_state: &str,
-) -> String {
-    format!(
-        "execute as @e[tag={object_name},tag={entity_name}] \
-        if score ${object_name}-{animation_name} timer matches {delay} run \
-        data merge entity @s {{block_state:{{{block_state}}}}}"
-    )
-}
-
-fn text(
-    object_name: &str,
-    animation_name: &str,
-    entity_name: &str,
-    delay: u32,
-    text: &str,
-) -> String {
-    format!(
-        "execute as @e[tag={object_name},tag={entity_name}] \
-        if score ${object_name}-{animation_name} timer matches {delay} run \
-        data merge entity @s {{text:'{text}'}}"
-    )
-}
-
-fn transformation(
-    object_name: &str,
-    animation_name: &str,
-    entity_name: &str,
-    delay: u32,
-    duration: u32,
-    transformation: &str,
-) -> String {
-    format!(
-        "execute as @e[tag={object_name},tag={entity_name}] \
-        if score ${object_name}-{animation_name} timer matches {delay} run \
-        data merge entity @s {{start_interpolation:0,interpolation_duration:{duration},transformation:{{{transformation}}}}}"
-    )
-}
-
-fn spawn(
-    object_name: &str,
-    animation_name: &str,
-    delay: u32,
-    entity_type: &str,
-    new_entity_name: &str,
-    source_entity_name: &str,
-) -> String {
-    format!(
-        "execute as @e[tag={object_name},tag={source_entity_name}] at @s \
-        if score ${object_name}-{animation_name} timer matches {delay} run \
-        summon {entity_type} ~ ~ ~ {{Tags:[\"{object_name}\",\"{new_entity_name}\"]}}"
-    )
-}
-
-fn reset(object_name: &str, animation_name: &str, delay: u32) -> String {
-    format!(
-        "\n\
-        execute if score ${object_name}-{animation_name} timer matches {delay}.. run scoreboard players set ${object_name}-{animation_name} flags 0\n\
-        execute if score ${object_name}-{animation_name} timer matches {delay}.. run scoreboard players set ${object_name}-{animation_name} timer -1\n\
-        "
-    )
-}
-
-fn increment(object_name: &str, animation_name: &str) -> String {
-    format!("scoreboard players add ${object_name}-{animation_name} timer 1")
+pub fn disclaimer() -> String {
+    "# File generated using DiSPA".to_string()
 }
 
 pub fn tick_function_line(
@@ -206,6 +116,73 @@ pub fn tick_function_line(
     format!("execute if score ${object_name}-{animation_name} flags matches 1.. run function {namespace}:{path}")
 }
 
-pub fn disclaimer() -> String {
-    "# File generated using DiSPA".to_string()
+fn increment(data: &ProgramData) -> String {
+    let object_name = &data.object_name;
+    let animation_name = &data.animation_name;
+    format!("scoreboard players add ${object_name}-{animation_name} timer 1")
+}
+
+fn reset(data: &ProgramData) -> String {
+    let ProgramData {
+        object_name,
+        animation_name,
+        delay,
+    } = data;
+    format!(
+        "\n\
+        execute if score ${object_name}-{animation_name} timer matches {delay}.. run scoreboard players set ${object_name}-{animation_name} flags 0\n\
+        execute if score ${object_name}-{animation_name} timer matches {delay}.. run scoreboard players set ${object_name}-{animation_name} timer -1\n\
+        "
+    )
+}
+
+fn transformation(
+    data: &ProgramData,
+    entity_name: &str,
+    duration: u32,
+    transformation: &str,
+) -> String {
+    data.execute_string(
+        entity_name,
+        format!("data merge entity @s {{start_interpolation:0,interpolation_duration:{duration},transformation:{{{transformation}}}}}")
+    )
+}
+
+fn spawn(
+    data: &ProgramData,
+    entity_type: &str,
+    new_entity_name: &str,
+    source_entity_name: &str,
+) -> String {
+    data.execute_at_string(
+        source_entity_name,
+        format!(
+            "summon {entity_type} ~ ~ ~ {{Tags:[\"{}\",\"{new_entity_name}\"]}}",
+            data.object_name
+        ),
+    )
+}
+
+fn item(data: &ProgramData, entity_name: &str, item: &str) -> String {
+    data.execute_string(
+        entity_name,
+        format!("item replace entity @s contents with {item}"),
+    )
+}
+
+fn block(data: &ProgramData, entity_name: &str, block_state: &str) -> String {
+    data.execute_string(
+        entity_name,
+        format!("data merge entity @s {{block_state:{{{block_state}}}}}"),
+    )
+}
+
+fn text(data: &ProgramData, entity_name: &str, text: &str) -> String {
+    data.execute_string(
+        entity_name,
+        format!("data merge entity @s {{text:'{text}'}}"),
+    )
+}
+fn teleport(data: &ProgramData, entity_name: &str, x: f32, y: f32, z: f32) -> String {
+    data.execute_at_string(entity_name, format!("tp @s ~{x} ~{y} ~{z}"))
 }
