@@ -19,7 +19,7 @@ macro_rules! arg_count {
     };
     (>=$e:expr, $data:expr) => {
         ensure!(
-            $data.arguments.len() == $e,
+            $data.arguments.len() >= $e,
             $data.compile_error(ErrorType::IncorrectArgumentCount(
                 $data.buffer.0,
                 $e,
@@ -190,7 +190,7 @@ impl Statement {
     fn parse_rotation(data: StatementData) -> AResult<Self> {
         let arguments = data.arguments;
         let name_regex = data.name_regex;
-        arg_count!(== 6, data);
+        arg_count!(== 4, data);
         let entity =
             Entity::new(arguments[0], name_regex).map_err(|err| data.compile_error(err))?;
 
