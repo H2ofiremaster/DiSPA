@@ -114,9 +114,9 @@ pub struct Entity(String);
 impl Entity {
     pub const TYPES: [&'static str; 3] = ["block_display", "item_display", "text_display"];
 
-    pub fn new(string: String, validator: &Regex) -> Result<Self, ErrorType> {
-        if validator.is_match(&string) {
-            Ok(Self(string))
+    pub fn new<'a>(string: &'a str, validator: &Regex) -> Result<Self, ErrorType<'a>> {
+        if validator.is_match(string) {
+            Ok(Self(string.to_string()))
         } else {
             Err(ErrorType::InvalidEntityName(string))
         }

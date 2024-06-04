@@ -13,18 +13,18 @@ use crate::{
 #[derive(Debug)]
 pub struct CompileError {
     file_path: String,
-    line: u32,
-    column: u32,
-    error_type: CompileErrorType,
+    line: usize,
+    column: usize,
+    error_message: String,
 }
-#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::needless_pass_by_value)]
 impl CompileError {
     pub fn new(file_info: &FileInfo, position: Position, error_type: CompileErrorType) -> Self {
         Self {
             file_path: file_info.path.clone(),
-            line: position.line as u32,
-            column: position.column as u32,
-            error_type,
+            line: position.line,
+            column: position.column,
+            error_message: format!("{error_type}"),
         }
     }
 }
@@ -33,32 +33,28 @@ impl Display for CompileError {
         write!(
             f,
             "Compilation Error: \n  File: {}\n  Line: {}, Column: {}\n  Error: {}",
-            self.file_path, self.line, self.column, self.error_type
+            self.file_path, self.line, self.column, self.error_message
         )
     }
 }
 impl std::error::Error for CompileError {}
 
 #[derive(Debug)]
-pub enum CompileErrorType {
-    //#[error("This file is empty.")]
-    //FileEmpty,
-    //#[error("The path '{0}' does not lead to a valid file.")]
-    //InvalidPath(String),
-    InvalidKeyword(String),
-    LineEmpty(String),
-    InvalidCharacters(String),
-    InvalidInt(String, ParseIntError),
-    InvalidFloat(String, ParseFloatError),
-    IncorrectArgumentCount(String, usize, usize),
-    InvalidCoordinate(String, ParseFloatError),
-    InvalidAxis(String),
-    InvalidEntityType(String),
-    InvalidEntityName(String),
-    InvalidState(String),
-    NoAnimationName(String),
+pub enum CompileErrorType<'a> {
+    InvalidKeyword(&'a str),
+    LineEmpty(&'a str),
+    InvalidCharacters(&'a str),
+    InvalidInt(&'a str, ParseIntError),
+    InvalidFloat(&'a str, ParseFloatError),
+    IncorrectArgumentCount(&'a str, usize, usize),
+    InvalidCoordinate(&'a str, ParseFloatError),
+    InvalidAxis(&'a str),
+    InvalidEntityType(&'a str),
+    InvalidEntityName(&'a str),
+    InvalidState(&'a str),
+    NoAnimationName(&'a str),
 }
-impl Display for CompileErrorType {
+impl Display for CompileErrorType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidKeyword(keyword) => {
