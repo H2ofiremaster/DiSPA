@@ -6,7 +6,7 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    objects::{Entity, NumberType, Position},
+    objects::{Entity, Position},
     statements::FileInfo,
 };
 
@@ -17,6 +17,7 @@ pub struct CompileError {
     column: u32,
     error_type: CompileErrorType,
 }
+#[allow(clippy::cast_possible_truncation)]
 impl CompileError {
     pub fn new(file_info: &FileInfo, position: Position, error_type: CompileErrorType) -> Self {
         Self {
@@ -46,18 +47,17 @@ pub enum CompileErrorType {
     //InvalidPath(String),
     InvalidKeyword(String),
     LineEmpty(String),
-    TooManyCharacters(String, usize, usize),
-    KeywordWithoutArguments(String, String),
+    KeywordWithoutArguments(String),
     InvalidCharacters(String),
-    InvalidNumberPrefix(char),
     InvalidInt(String, ParseIntError),
+    InvalidFloat(String, ParseFloatError),
     StringSectionEmpty(String),
     IncorrectArgumentCount(String, usize, usize),
-    DuplicateNumberType(NumberType),
-    IncorrectSeparator(String, char),
     InvalidCoordinate(String, ParseFloatError),
+    InvalidAxis(String),
     InvalidEntityType(String),
     InvalidEntityName(String),
+    NoAnimationName(String),
 }
 impl Display for CompileErrorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -68,26 +68,20 @@ impl Display for CompileErrorType {
             Self::LineEmpty(line) => {
                 write!(f, "Line '{line}' is empty.")
             }
-            Self::TooManyCharacters(statement, expected, found) => {
+            Self::KeywordWithoutArguments(statement) => {
                 write!(
                     f,
-                    "Too many characters in '{statement}': Expected '{expected}', found '{found}'."
-                )
-            }
-            Self::KeywordWithoutArguments(keyword, statement) => {
-                write!(
-                    f,
-                    "Statement '{statement}' specifies keyword '{keyword}' without arguments."
+                    "Statement '{statement}' specifies a keyword without arguments."
                 )
             }
             Self::InvalidCharacters(statement) => {
                 write!(f, "Statement '{statement}' contains invalid characters.")
             }
-            Self::InvalidNumberPrefix(char) => {
-                write!(f, "Character '{char}' is an invalid number prefix.")
-            }
             Self::InvalidInt(number, error) => {
-                write!(f, "Number '{number}' is not a valid int: {error}")
+                write!(f, "Number '{number}' is not a valid integer: {error}")
+            }
+            Self::InvalidFloat(number, error) => {
+                write!(f, "Number '{number}' is not a valid float: {error}")
             }
             Self::StringSectionEmpty(string) => {
                 write!(f, "Section of string '{string}' is empty.")
@@ -98,20 +92,11 @@ impl Display for CompileErrorType {
                     "Incorrect number of arguments in '{statement}': Expected '{expected}', found '{found}'."
                 )
             }
-            Self::DuplicateNumberType(number_type) => {
-                write!(
-                    f,
-                    "Tried creating NumberSet with duplicate number type: {number_type}"
-                )
-            }
-            Self::IncorrectSeparator(statement, expected) => {
-                write!(
-                    f,
-                    "Statement '{statement}' had the incorrect separator: Expected '{expected}'."
-                )
-            }
             Self::InvalidCoordinate(coordinate, error) => {
                 write!(f, "Coordinate '{coordinate}' is invalid: {error}")
+            }
+            Self::InvalidAxis(axis) => {
+                write!(f, "'{axis}' is not a valid axis.")
             }
             Self::InvalidEntityType(argument) => {
                 write!(
@@ -123,6 +108,12 @@ impl Display for CompileErrorType {
             Self::InvalidEntityName(name) => {
                 write!(f, "Entity name '{name}' contains invalid characters.")
             }
+            Self::NoAnimationName(argument) => {
+                write!(
+                    f,
+                    "Argument '{argument}' containes object name, but no animation name."
+                )
+            }
         }
     }
 }
@@ -131,8 +122,6 @@ impl Display for CompileErrorType {
 pub enum GenericError {
     #[error("The path '{0}' does not lead to a valid file.")]
     InvalidPath(String),
-    #[error("Block queue is empty.")]
-    BlockQueueEmpty,
     #[error("Pattern '{0}' is not a valid regex: {1}")]
     InvalidRegex(&'static str, #[source] regex::Error),
     #[error("The file with path '{0}' does not exist.")]

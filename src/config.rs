@@ -10,11 +10,8 @@ pub struct Config {
 }
 
 const CONFIG_PATH: &str = "./dspa_config.json";
-pub fn read_config() -> anyhow::Result<Config> {
-    let config_contents = match fs::read_to_string(CONFIG_PATH) {
-        Ok(contents) => contents,
-        Err(_) => initialize_config_file(),
-    };
+pub fn read() -> anyhow::Result<Config> {
+    let config_contents = fs::read_to_string(CONFIG_PATH).unwrap_or_else(|_| initialize_file());
     Ok(serde_json::from_str::<Config>(&config_contents)?)
 }
 
@@ -26,7 +23,7 @@ const CONFIG_DEFAULTS: &str = r#"
     "namespace": "de"
 }
 "#;
-fn initialize_config_file() -> String {
+fn initialize_file() -> String {
     fs::write("./dspa_config.json", CONFIG_DEFAULTS).expect("config path should be valid.");
     CONFIG_DEFAULTS.into()
 }

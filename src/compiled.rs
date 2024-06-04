@@ -1,10 +1,8 @@
 use itertools::Itertools;
 
-use crate::{
-    objects::NumberSet,
-    statements::{Program, Statement, TransformStatement},
-};
+use crate::statements::{Program, Statement};
 
+#[allow(clippy::module_name_repetitions)]
 pub struct CompiledFile {
     pub path: String,
     pub object_name: String,
@@ -15,39 +13,59 @@ pub struct CompiledFile {
 pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFile {
     let mut object_name: String = file_name.to_string();
     let mut animation_name: String = file_name.to_string();
+    let mut delay = 0;
     let program_contents = program
         .statements
         .into_iter()
         .filter_map(|statement| match statement {
-            Statement::ObjectName(name) => {
-                object_name = name;
+            Statement::ObjectName(object, animation) => {
+                object_name = object;
+                animation_name = animation;
                 None
             }
-            Statement::AnimationName(name) => {
-                animation_name = name;
+            Statement::Wait(duration) => {
+                delay += duration;
                 None
             }
-            Statement::Transform(numbers, entity, keyword) => {
-                let compiled_transformation = match keyword {
-                    TransformStatement::Translate(t) => t.compile(),
-                    TransformStatement::Rotate(r) => r.compile(),
-                    TransformStatement::Scale(s) => s.compile(),
-                };
+            Statement::Empty => None,
+
+            Statement::Translate(entity, translation, duration) => {
+                let compiled_transformation = translation.compile();
                 Some(transformation(
                     &object_name,
                     &animation_name,
                     entity.name(),
-                    numbers,
+                    delay,
+                    duration,
                     &compiled_transformation,
                 ))
             }
-            Statement::End(delay) => Some(reset(&object_name, &animation_name, delay)),
+            Statement::Rotate(entity, rotation, duration) => {
+                let compiled_transformation = rotation.compile();
+                Some(transformation(
+                    &object_name,
+                    &animation_name,
+                    entity.name(),
+                    delay,
+                    duration,
+                    &compiled_transformation,
+                ))
+            }
+            Statement::Scale(entity, scale, duration) => {
+                let compiled_transformation = scale.compile();
+                Some(transformation(
+                    &object_name,
+                    &animation_name,
+                    entity.name(),
+                    delay,
+                    duration,
+                    &compiled_transformation,
+                ))
+            }
             Statement::Spawn {
-                delay,
                 source,
                 entity_type,
                 new,
-                offset,
             } => Some(spawn(
                 &object_name,
                 &animation_name,
@@ -55,9 +73,7 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
                 &entity_type,
                 new.name(),
                 source.name(),
-                offset,
             )),
-            Statement::Block(_) | Statement::BlockEnd | Statement::EndOfFile => None,
         })
         .join("\n");
 
@@ -65,7 +81,13 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
         path: file_path.to_string(),
         object_name: object_name.to_string(),
         animation_name: animation_name.to_string(),
-        contents: disclaimer() + &program_contents + &increment(&object_name, &animation_name),
+        contents: format!(
+            "{}\n{}\n{}\n{}",
+            disclaimer(),
+            program_contents,
+            reset(&object_name, &animation_name, delay),
+            increment(&object_name, &animation_name),
+        ),
     }
 }
 
@@ -73,14 +95,14 @@ fn transformation(
     object_name: &str,
     animation_name: &str,
     entity_name: &str,
-    values: NumberSet,
+    delay: u32,
+    duration: u32,
     transformation: &str,
 ) -> String {
-    let NumberSet { delay, duration } = values;
     format!(
-        "execute as @e[tag={object_name}-{entity_name}] \
+        "execute as @e[tag={object_name},tag={entity_name}] \
         if score ${object_name}-{animation_name} timer matches {delay} run \
-        data merge entity @s {{start_interpolation:0,interpolation_duration:{duration},transformation: {{{transformation}}}}}"
+        data merge entity @s {{start_interpolation:0,interpolation_duration:{duration},transformation:{{{transformation}}}}}"
     )
 }
 
@@ -91,13 +113,11 @@ fn spawn(
     entity_type: &str,
     new_entity_name: &str,
     source_entity_name: &str,
-    offset: (f32, f32, f32),
 ) -> String {
-    let (x, y, z) = offset;
     format!(
-        "execute as @e[tag={object_name}-{source_entity_name}] at @s \
+        "execute as @e[tag={object_name},tag={source_entity_name}] at @s \
         if score ${object_name}-{animation_name} timer matches {delay} run \
-        summon {entity_type} ~{x}, ~{y}, ~{z} {{Tags:[\"{object_name}-{new_entity_name}\"]}}"
+        summon {entity_type} ~ ~ ~ {{Tags:[\"{object_name}\",\"{new_entity_name}\"]}}"
     )
 }
 
@@ -124,5 +144,5 @@ pub fn tick_function_line(
 }
 
 pub fn disclaimer() -> String {
-    "# File generated using DiSPA\n".to_string()
+    "# File generated using DiSPA".to_string()
 }

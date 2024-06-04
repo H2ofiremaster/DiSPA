@@ -1,47 +1,20 @@
-# object <name>;
-# anim <name>;
-# @ % move <entity> <x> <y> <z>;
-# @ % turn <entity> <yaw> <pitch> <roll>;
-# @ % size <entity> <x> <y> <z>;
-# @ spawn <type> <new_entity> <source_entity> [offset_x] [offset_y] [offset_z];
-# @ end;
+# object name:anim
+# # comment
+#
+# wait <time>
+#
+# move <entity> <duration> <x> <y> <z>
+# turn <entity> <duration> <axis> <angle>
+# size <entity> <duration> <x> <y> <z>
+#
+# spawn <source_entity> <type> <target_name>
+# 
+# block <entity> <block_state>
+# item <entity> <item>
+# text <entity> <text>
 
-object dtest;
-anim atest;
-# @ is delay, % is duration.
-# This is a comment, by the way.
-
-spawn item_display s2 e1; 
-spawn item_display s2 e1 1 0 0; 
-
-move e1 1 0 0;
-@10 move e1 0 1 0;
-@20 %10 move e1 0 0 1;
-
-@30 {
-    turn e1 90 0 0;
-    @40 turn e1 0 90 0;
-    @50 %20 turn e1 0 0 90;
-}
-
-@60 %30 {
-    size e1 2 1 1;
-    @70 size e1 1 2 1;
-    @80 %40 size e1 1 2 1;
-    @90 {
-        move e1 ~1 ~ ~;
-        turn e1 ~90 ~ ~;
-        size e1 ~1 ~ ~;
-    }
-    %50 {
-        move e1 0 ~1 0;
-        turn e1 0 ~90 0;
-        size e1 1 ~1 1;
-    }
-    @100 %60 {
-        move e1 ~ ~ 1;
-        turn e1 ~ ~ 90;
-        size e1 ~ ~ 2;
-    }
-}
-@110 end;
+move test 20 0 1 0
+turn test 20 y 90
+size test 20 2 2 2
+wait 40
+spawn test block_display test2

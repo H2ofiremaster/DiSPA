@@ -24,7 +24,7 @@ fn get_folder_tree(path: PathBuf) -> Vec<String> {
         .into_iter()
         .filter_map(|path| {
             if let Err(ref err) = path {
-                println!("{}", GenericError::InvalidPath(err.to_string()))
+                println!("{}", GenericError::InvalidPath(err.to_string()));
             }
             path.ok()
         })
@@ -37,6 +37,10 @@ fn get_folder_tree(path: PathBuf) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
+/// Collects all the 'Ok' values in the input and flattens the Results into the output.
+///
+/// # Errors
+/// If any of the results in the input are Err, this returns a `GenericError::Collection` containing all of the errors.
 pub fn collect_errors<T, E: Display>(input: Vec<Result<T, E>>) -> anyhow::Result<Vec<T>> {
     let errors = input
         .iter()
@@ -47,18 +51,18 @@ pub fn collect_errors<T, E: Display>(input: Vec<Result<T, E>>) -> anyhow::Result
             acc
         });
     ensure!(errors.is_empty(), GenericError::Collection(errors));
-    Ok(input.into_iter().filter_map(|e| e.ok()).collect())
+    Ok(input.into_iter().filter_map(Result::ok).collect())
 }
 
 const DISPA_EXTENSION: &str = "dspa";
 const MINECRAFT_EXTENSION: &str = "mcfunction";
 
 fn main() -> anyhow::Result<()> {
-    let config = config::read_config()?;
+    let config = config::read()?;
     let files = get_folder_tree(PathBuf::from_str(&config.source_folder).unwrap());
     let results = files.into_iter().map(|path| parse_file(&path)).collect();
     fs::write(&config.tick_function, "")?;
-    for result in collect_errors(results)?.into_iter() {
+    for result in collect_errors(results)? {
         let path: String = result
             .path
             .replace(&config.source_folder, &config.target_folder)
@@ -86,7 +90,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("Press Enter to continue...");
-    std::io::stdout().flush().unwrap();
+    let _ = std::io::stdout().flush();
     let _ = stdin().read(&mut [0_u8]);
     Ok(())
 }
