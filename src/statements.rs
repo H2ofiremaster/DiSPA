@@ -41,6 +41,22 @@ impl Program {
 pub type Vector = (f32, f32, f32);
 type Buffer<'a> = (&'a str, Position);
 
+#[derive(Debug, Clone, Copy)]
+struct StatementData<'a> {
+    file_info: &'a FileInfo,
+    buffer: Buffer<'a>,
+    arguments: &'a [&'a str],
+    name_regex: &'a Regex,
+}
+impl<'a> StatementData<'a> {
+    fn compile_error(&self, error_type: ErrorType) -> CompileError {
+        CompileError::new(self.file_info, self.buffer.1, error_type)
+    }
+    fn compile_error_offset(&self, offset: usize, error_type: ErrorType) -> CompileError {
+        CompileError::new(self.file_info, self.buffer.1 + offset, error_type)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     ObjectName(String, String),
@@ -81,63 +97,54 @@ impl Statement {
 
         let buffer: Buffer = (buffer.0, buffer.1 + keyword.len());
 
-        match keyword
-            .parse()
-            .map_err(|err| CompileError::new(file_info, buffer.1 - keyword.len(), err))?
-        {
-            Keyword::Object => Self::parse_object(file_info, buffer, &arguments, &regexes.name),
-            Keyword::Wait => Self::parse_wait(file_info, buffer, &arguments),
+        let data = StatementData {
+            file_info,
+            buffer,
+            arguments: &arguments,
+            name_regex: &regexes.name,
+        };
 
-            Keyword::Translate => {
-                Self::parse_translation(file_info, buffer, &arguments, &regexes.name)
-            }
-            Keyword::Rotate => Self::parse_rotation(file_info, buffer, &arguments, &regexes.name),
-            Keyword::Scale => Self::parse_scale(file_info, buffer, &arguments, &regexes.name),
+        match keyword.parse().map_err(|err| data.compile_error(err))? {
+            Keyword::Object => Self::parse_object(data),
+            Keyword::Wait => Self::parse_wait(data),
 
-            Keyword::Spawn => Self::parse_spawn(file_info, buffer, &arguments, &regexes.name),
-            Keyword::Item => Self::parse_item(file_info, buffer, &arguments, &regexes.name),
-            Keyword::Block => Self::parse_block(file_info, buffer, &arguments, &regexes.name),
-            Keyword::Text => Self::parse_text(file_info, buffer, &arguments, &regexes.name),
+            Keyword::Translate => Self::parse_translation(data),
+            Keyword::Rotate => Self::parse_rotation(data),
+            Keyword::Scale => Self::parse_scale(data),
+
+            Keyword::Spawn => Self::parse_spawn(data),
+            Keyword::Item => Self::parse_item(data),
+            Keyword::Block => Self::parse_block(data),
+            Keyword::Text => Self::parse_text(data),
         }
     }
 
-    fn parse_object(
-        file_info: &FileInfo,
-        buffer: Buffer,
-        arguments: &[&str],
-        name_regex: &Regex,
-    ) -> AResult<Self> {
+    fn parse_object(data: StatementData) -> AResult<Self> {
+        let StatementData {
+            file_info: _,
+            buffer,
+            arguments,
+            name_regex,
+        } = data;
         ensure!(
             arguments.len() == 1,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 1, arguments.len()),
-            )
+            data.compile_error(ErrorType::IncorrectArgumentCount(
+                buffer.0.to_string(),
+                1,
+                arguments.len()
+            ))
         );
         let argument = arguments[0];
-        let (object_name, animation_name) = argument.split_once(':').ok_or_else(|| {
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::NoAnimationName(argument.to_string()),
-            )
-        })?;
+        let (object_name, animation_name) = argument
+            .split_once(':')
+            .ok_or_else(|| data.compile_error(ErrorType::NoAnimationName(argument.to_string())))?;
         ensure!(
             name_regex.is_match(object_name),
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidCharacters(object_name.to_string())
-            )
+            data.compile_error(ErrorType::InvalidCharacters(object_name.to_string()))
         );
         ensure!(
             name_regex.is_match(animation_name),
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidCharacters(animation_name.to_string())
-            )
+            data.compile_error(ErrorType::InvalidCharacters(animation_name.to_string()))
         );
 
         Ok(Self::ObjectName(
@@ -146,115 +153,110 @@ impl Statement {
         ))
     }
 
-    fn parse_wait(file_info: &FileInfo, buffer: Buffer, arguments: &[&str]) -> AResult<Self> {
+    fn parse_wait(data: StatementData) -> AResult<Self> {
+        let StatementData {
+            file_info: _,
+            buffer,
+            arguments,
+            name_regex: _,
+        } = data;
         ensure!(
             arguments.len() == 1,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 1, arguments.len())
-            )
+            data.compile_error(ErrorType::IncorrectArgumentCount(
+                buffer.0.to_string(),
+                1,
+                arguments.len()
+            ))
         );
-        let wait_duration: u32 = arguments[0].parse().map_err(|err| {
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidInt(buffer.0.to_string(), err),
-            )
-        })?;
+        let wait_duration: u32 = arguments[0]
+            .parse()
+            .map_err(|err| data.compile_error(ErrorType::InvalidInt(buffer.0.to_string(), err)))?;
         Ok(Self::Wait(wait_duration))
     }
 
-    fn parse_translation(
-        file_info: &FileInfo,
-        buffer: Buffer,
-        arguments: &[&str],
-        name_regex: &Regex,
-    ) -> AResult<Self> {
+    fn parse_translation(data: StatementData) -> AResult<Self> {
+        let StatementData {
+            file_info: _,
+            buffer,
+            arguments,
+            name_regex,
+        } = data;
         ensure!(
             arguments.len() == 5,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 5, arguments.len())
-            )
+            data.compile_error(ErrorType::IncorrectArgumentCount(
+                buffer.0.to_string(),
+                5,
+                arguments.len()
+            ))
         );
         let entity = Entity::new(arguments[0].to_string(), name_regex)
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
-        let duration: u32 = arguments[1].parse().map_err(|err| {
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidInt(buffer.0.to_string(), err),
-            )
-        })?;
+            .map_err(|err| data.compile_error(err))?;
+        let duration: u32 = arguments[1]
+            .parse()
+            .map_err(|err| data.compile_error(ErrorType::InvalidInt(buffer.0.to_string(), err)))?;
         let position: Vector = Self::parse_coordinates(arguments[2], arguments[3], arguments[4])
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+            .map_err(|err| data.compile_error(err))?;
         let translation = Translation::new(position);
         Ok(Self::Translate(entity, translation, duration))
     }
 
-    fn parse_rotation(
-        file_info: &FileInfo,
-        buffer: Buffer,
-        arguments: &[&str],
-        name_regex: &Regex,
-    ) -> AResult<Self> {
+    fn parse_rotation(data: StatementData) -> AResult<Self> {
+        let StatementData {
+            file_info: _,
+            buffer,
+            arguments,
+            name_regex,
+        } = data;
         ensure!(
             arguments.len() == 4,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 5, arguments.len())
-            )
+            data.compile_error(ErrorType::IncorrectArgumentCount(
+                buffer.0.to_string(),
+                5,
+                arguments.len()
+            ))
         );
         let entity = Entity::new(arguments[0].to_string(), name_regex)
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+            .map_err(|err| data.compile_error(err))?;
+
         let duration: u32 = arguments[1].parse().map_err(|err| {
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidInt(arguments[1].to_string(), err),
-            )
+            data.compile_error(ErrorType::InvalidInt(arguments[1].to_string(), err))
         })?;
-        let axis = Self::parse_axis(arguments[2])
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+
+        let axis: [f32; 3] =
+            Self::parse_axis(arguments[2]).map_err(|err| data.compile_error(err))?;
         let angle: f32 = arguments[3].parse().map_err(|err| {
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidFloat(arguments[3].to_string(), err),
-            )
+            data.compile_error(ErrorType::InvalidFloat(arguments[3].to_string(), err))
         })?;
+
         let rotation = Rotation::new(axis, angle);
         Ok(Self::Rotate(entity, rotation, duration))
     }
 
-    fn parse_scale(
-        file_info: &FileInfo,
-        buffer: Buffer,
-        arguments: &[&str],
-        name_regex: &Regex,
-    ) -> AResult<Self> {
+    fn parse_scale(data: StatementData) -> AResult<Self> {
+        let StatementData {
+            file_info: _,
+            buffer,
+            arguments,
+            name_regex,
+        } = data;
         ensure!(
             arguments.len() == 5,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 5, arguments.len())
-            )
+            data.compile_error(ErrorType::IncorrectArgumentCount(
+                buffer.0.to_string(),
+                5,
+                arguments.len()
+            ))
         );
         let entity = Entity::new(arguments[0].to_string(), name_regex)
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
-        let duration: u32 = arguments[1].parse().map_err(|err| {
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidInt(buffer.0.to_string(), err),
-            )
-        })?;
+            .map_err(|err| data.compile_error(err))?;
+
+        let duration: u32 = arguments[1]
+            .parse()
+            .map_err(|err| data.compile_error(ErrorType::InvalidInt(buffer.0.to_string(), err)))?;
+
         let position: Vector = Self::parse_coordinates(arguments[2], arguments[3], arguments[4])
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+            .map_err(|err| data.compile_error(err))?;
+
         let scale = Scale::new(position);
         Ok(Self::Scale(entity, scale, duration))
     }
@@ -299,33 +301,31 @@ impl Statement {
         }
         Ok([axes[0], axes[1], axes[2]])
     }
-    fn parse_spawn(
-        file_info: &FileInfo,
-        buffer: Buffer,
-        arguments: &[&str],
-        name_regex: &Regex,
-    ) -> AResult<Self> {
+
+    fn parse_spawn(data: StatementData) -> AResult<Self> {
+        let StatementData {
+            file_info: _,
+            buffer,
+            arguments,
+            name_regex,
+        } = data;
         ensure!(
             arguments.len() == 3,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 3, arguments.len())
-            )
+            data.compile_error(ErrorType::IncorrectArgumentCount(
+                buffer.0.to_string(),
+                3,
+                arguments.len()
+            ))
         );
         let source_entity = Entity::new(arguments[0].to_string(), name_regex)
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+            .map_err(|err| data.compile_error(err))?;
         let entity_type = arguments[1];
         ensure!(
             Entity::TYPES.contains(&entity_type),
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::InvalidEntityType(entity_type.to_string()),
-            ),
+            data.compile_error(ErrorType::InvalidEntityType(entity_type.to_string()),),
         );
         let new_entity = Entity::new(arguments[2].to_string(), name_regex)
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+            .map_err(|err| data.compile_error(err))?;
         Ok(Self::Spawn {
             source: source_entity,
             entity_type: entity_type.to_string(),
@@ -333,42 +333,44 @@ impl Statement {
         })
     }
 
-    fn parse_item(
-        file_info: &FileInfo,
-        buffer: Buffer,
-        arguments: &[&str],
-        name_regex: &Regex,
-    ) -> AResult<Self> {
+    fn parse_item(data: StatementData) -> AResult<Self> {
+        let StatementData {
+            file_info: _,
+            buffer,
+            arguments,
+            name_regex,
+        } = data;
         ensure!(
             arguments.len() >= 2,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 2, arguments.len())
-            )
+            data.compile_error(ErrorType::IncorrectArgumentCount(
+                buffer.0.to_string(),
+                2,
+                arguments.len()
+            ))
         );
         let entity = Entity::new(arguments[0].to_string(), name_regex)
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+            .map_err(|err| data.compile_error(err))?;
         let item = arguments[1..].join(" ");
         Ok(Self::Item(entity, item))
     }
 
-    fn parse_block(
-        file_info: &FileInfo,
-        buffer: Buffer,
-        arguments: &[&str],
-        name_regex: &Regex,
-    ) -> AResult<Self> {
+    fn parse_block(data: StatementData) -> AResult<Self> {
+        let StatementData {
+            file_info: _,
+            buffer,
+            arguments,
+            name_regex,
+        } = data;
         ensure!(
             arguments.len() >= 2,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 2, arguments.len())
-            )
+            data.compile_error(ErrorType::IncorrectArgumentCount(
+                buffer.0.to_string(),
+                2,
+                arguments.len()
+            ))
         );
         let entity = Entity::new(arguments[0].to_string(), name_regex)
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+            .map_err(|err| data.compile_error(err))?;
         let block_state = arguments[1..].join(" ");
         let (id, state): (&str, _) = block_state
             .split_once('[')
@@ -377,9 +379,8 @@ impl Statement {
             None => BlockState::new(id.to_string(), Vec::new()),
             Some(state) => {
                 let state = state.strip_suffix(']').ok_or_else(|| {
-                    CompileError::new(
-                        file_info,
-                        buffer.1 + id.len() + state.len(),
+                    data.compile_error_offset(
+                        id.len() + state.len(),
                         ErrorType::InvalidState(state.to_string()),
                     )
                 })?;
@@ -390,9 +391,8 @@ impl Statement {
                             .split_once('=')
                             .map(|(name, value)| (name.to_string(), value.to_string()))
                             .ok_or_else(|| {
-                                CompileError::new(
-                                    file_info,
-                                    buffer.1 + id.len(),
+                                data.compile_error_offset(
+                                    id.len(),
                                     ErrorType::InvalidState(state.to_string()),
                                 )
                             })
@@ -405,22 +405,23 @@ impl Statement {
         Ok(Self::Block(entity, block))
     }
 
-    fn parse_text(
-        file_info: &FileInfo,
-        buffer: Buffer,
-        arguments: &[&str],
-        name_regex: &Regex,
-    ) -> AResult<Self> {
+    fn parse_text(data: StatementData) -> AResult<Self> {
+        let StatementData {
+            file_info: _,
+            buffer,
+            arguments,
+            name_regex,
+        } = data;
         ensure!(
             arguments.len() >= 2,
-            CompileError::new(
-                file_info,
-                buffer.1,
-                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 2, arguments.len())
-            )
+            data.compile_error(ErrorType::IncorrectArgumentCount(
+                buffer.0.to_string(),
+                2,
+                arguments.len()
+            ))
         );
         let entity = Entity::new(arguments[0].to_string(), name_regex)
-            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+            .map_err(|err| data.compile_error(err))?;
         let text = arguments[1..].join(" ");
         Ok(Self::Text(entity, text))
     }
