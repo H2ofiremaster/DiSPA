@@ -109,8 +109,8 @@ impl Display for CompileErrorType<'_> {
 
 #[derive(Debug, Error)]
 pub enum GenericError {
-    #[error("The path '{0}' does not lead to a valid file.")]
-    InvalidPath(String),
+    #[error("The path '{0}' does not lead to a valid file: ")]
+    InvalidPath(String, String),
     #[error("Pattern '{0}' is not a valid regex: {1}")]
     InvalidRegex(&'static str, #[source] regex::Error),
     #[error("The file with path '{0}' does not exist.")]

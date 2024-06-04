@@ -9,7 +9,7 @@ use crate::{
 
 pub fn parse_file(file_path: &str) -> anyhow::Result<CompiledFile> {
     let contents = fs::read_to_string(file_path)
-        .map_err(|err| GenericError::InvalidPath(err.to_string()))?
+        .map_err(|err| GenericError::InvalidPath(file_path.to_string(), err.to_string()))?
         .replace('\r', "");
     let chars = to_tracked(&contents);
     let program = Program::parse_from_file(

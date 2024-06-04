@@ -24,7 +24,10 @@ fn get_folder_tree(path: PathBuf) -> Vec<String> {
         .into_iter()
         .filter_map(|path| {
             if let Err(ref err) = path {
-                println!("{}", GenericError::InvalidPath(err.to_string()));
+                println!(
+                    "{}",
+                    GenericError::InvalidPath(String::from("<none>"), err.to_string())
+                );
             }
             path.ok()
         })
@@ -67,7 +70,7 @@ fn main() -> anyhow::Result<()> {
             .path
             .replace(&config.source_folder, &config.target_folder)
             .replace(DISPA_EXTENSION, MINECRAFT_EXTENSION);
-        fs::write(&path, result.contents)?;
+        fs::write(&path, result.contents).map_err(|_| GenericError::FileNotExist(path.clone()))?;
         let filtered_path = path
             .replace('\\', "/")
             .strip_prefix("./")
