@@ -1,1 +1,1 @@
-execute if score $test_file-test_file flags matches 1.. run function de:test/objects/test_file
+execute if score $test_obj-test_anim flags matches 1.. run function de:test/objects/test_file

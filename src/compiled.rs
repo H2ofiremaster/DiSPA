@@ -74,6 +74,27 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
                 new.name(),
                 source.name(),
             )),
+            Statement::Item(entity, item_definition) => Some(item(
+                &object_name,
+                &animation_name,
+                entity.name(),
+                delay,
+                &item_definition,
+            )),
+            Statement::Block(entity, block_state) => Some(block(
+                &object_name,
+                &animation_name,
+                entity.name(),
+                delay,
+                &block_state.compile(),
+            )),
+            Statement::Text(entity, text_string) => Some(text(
+                &object_name,
+                &animation_name,
+                entity.name(),
+                delay,
+                &text_string,
+            )),
         })
         .join("\n");
 
@@ -89,6 +110,48 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
             increment(&object_name, &animation_name),
         ),
     }
+}
+
+fn item(
+    object_name: &str,
+    animation_name: &str,
+    entity_name: &str,
+    delay: u32,
+    item: &str,
+) -> String {
+    format!(
+        "execute as @e[tag={object_name},tag={entity_name}] \
+        if score ${object_name}-{animation_name} timer matches {delay} run \
+        item replace entity @s contents with {item}"
+    )
+}
+
+fn block(
+    object_name: &str,
+    animation_name: &str,
+    entity_name: &str,
+    delay: u32,
+    block_state: &str,
+) -> String {
+    format!(
+        "execute as @e[tag={object_name},tag={entity_name}] \
+        if score ${object_name}-{animation_name} timer matches {delay} run \
+        data merge entity @s {{block_state:{{{block_state}}}}}"
+    )
+}
+
+fn text(
+    object_name: &str,
+    animation_name: &str,
+    entity_name: &str,
+    delay: u32,
+    text: &str,
+) -> String {
+    format!(
+        "execute as @e[tag={object_name},tag={entity_name}] \
+        if score ${object_name}-{animation_name} timer matches {delay} run \
+        data merge entity @s {{text:'{text}'}}"
+    )
 }
 
 fn transformation(

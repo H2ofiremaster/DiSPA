@@ -47,16 +47,15 @@ pub enum CompileErrorType {
     //InvalidPath(String),
     InvalidKeyword(String),
     LineEmpty(String),
-    KeywordWithoutArguments(String),
     InvalidCharacters(String),
     InvalidInt(String, ParseIntError),
     InvalidFloat(String, ParseFloatError),
-    StringSectionEmpty(String),
     IncorrectArgumentCount(String, usize, usize),
     InvalidCoordinate(String, ParseFloatError),
     InvalidAxis(String),
     InvalidEntityType(String),
     InvalidEntityName(String),
+    InvalidState(String),
     NoAnimationName(String),
 }
 impl Display for CompileErrorType {
@@ -68,12 +67,6 @@ impl Display for CompileErrorType {
             Self::LineEmpty(line) => {
                 write!(f, "Line '{line}' is empty.")
             }
-            Self::KeywordWithoutArguments(statement) => {
-                write!(
-                    f,
-                    "Statement '{statement}' specifies a keyword without arguments."
-                )
-            }
             Self::InvalidCharacters(statement) => {
                 write!(f, "Statement '{statement}' contains invalid characters.")
             }
@@ -82,9 +75,6 @@ impl Display for CompileErrorType {
             }
             Self::InvalidFloat(number, error) => {
                 write!(f, "Number '{number}' is not a valid float: {error}")
-            }
-            Self::StringSectionEmpty(string) => {
-                write!(f, "Section of string '{string}' is empty.")
             }
             Self::IncorrectArgumentCount(statement, expected, found) => {
                 write!(
@@ -107,6 +97,9 @@ impl Display for CompileErrorType {
             }
             Self::InvalidEntityName(name) => {
                 write!(f, "Entity name '{name}' contains invalid characters.")
+            }
+            Self::InvalidState(state) => {
+                write!(f, "State '{state}' is invalid.")
             }
             Self::NoAnimationName(argument) => {
                 write!(

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use crate::{
     errors::{CompileError, CompileErrorType as ErrorType},
-    objects::{Entity, Position, Regexes, Rotation, Scale, TrackedChar, Translation},
+    objects::{BlockState, Entity, Position, Regexes, Rotation, Scale, TrackedChar, Translation},
 };
 
 use anyhow::{ensure, Result as AResult};
@@ -53,6 +53,9 @@ pub enum Statement {
         entity_type: String,
         new: Entity,
     },
+    Item(Entity, String),
+    Block(Entity, BlockState),
+    Text(Entity, String),
     Empty,
 }
 impl Statement {
@@ -92,9 +95,9 @@ impl Statement {
             Keyword::Scale => Self::parse_scale(file_info, buffer, &arguments, &regexes.name),
 
             Keyword::Spawn => Self::parse_spawn(file_info, buffer, &arguments, &regexes.name),
-            Keyword::Item => Self::parse_item(file_info, buffer, &arguments),
-            Keyword::Block => Self::parse_block(file_info, buffer, &arguments),
-            Keyword::Text => Self::parse_text(file_info, buffer, &arguments),
+            Keyword::Item => Self::parse_item(file_info, buffer, &arguments, &regexes.name),
+            Keyword::Block => Self::parse_block(file_info, buffer, &arguments, &regexes.name),
+            Keyword::Text => Self::parse_text(file_info, buffer, &arguments, &regexes.name),
         }
     }
 
@@ -121,11 +124,19 @@ impl Statement {
             )
         })?;
         ensure!(
-            name_regex.is_match(argument),
+            name_regex.is_match(object_name),
             CompileError::new(
                 file_info,
                 buffer.1,
-                ErrorType::InvalidCharacters(argument.to_string())
+                ErrorType::InvalidCharacters(object_name.to_string())
+            )
+        );
+        ensure!(
+            name_regex.is_match(animation_name),
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::InvalidCharacters(animation_name.to_string())
             )
         );
 
@@ -322,16 +333,96 @@ impl Statement {
         })
     }
 
-    fn parse_item(info: &FileInfo, buffer: Buffer, arguments: &[&str]) -> AResult<Self> {
-        todo!()
+    fn parse_item(
+        file_info: &FileInfo,
+        buffer: Buffer,
+        arguments: &[&str],
+        name_regex: &Regex,
+    ) -> AResult<Self> {
+        ensure!(
+            arguments.len() >= 2,
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 2, arguments.len())
+            )
+        );
+        let entity = Entity::new(arguments[0].to_string(), name_regex)
+            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+        let item = arguments[1..].join(" ");
+        Ok(Self::Item(entity, item))
     }
 
-    fn parse_block(info: &FileInfo, buffer: Buffer, arguments: &[&str]) -> AResult<Self> {
-        todo!()
+    fn parse_block(
+        file_info: &FileInfo,
+        buffer: Buffer,
+        arguments: &[&str],
+        name_regex: &Regex,
+    ) -> AResult<Self> {
+        ensure!(
+            arguments.len() >= 2,
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 2, arguments.len())
+            )
+        );
+        let entity = Entity::new(arguments[0].to_string(), name_regex)
+            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+        let block_state = arguments[1..].join(" ");
+        let (id, state): (&str, _) = block_state
+            .split_once('[')
+            .map_or((&block_state, None), |(id, state)| (id, Some(state)));
+        let block = match state {
+            None => BlockState::new(id.to_string(), Vec::new()),
+            Some(state) => {
+                let state = state.strip_suffix(']').ok_or_else(|| {
+                    CompileError::new(
+                        file_info,
+                        buffer.1 + id.len() + state.len(),
+                        ErrorType::InvalidState(state.to_string()),
+                    )
+                })?;
+                let states: Vec<_> = state
+                    .split(',')
+                    .map(|part| {
+                        part.trim()
+                            .split_once('=')
+                            .map(|(name, value)| (name.to_string(), value.to_string()))
+                            .ok_or_else(|| {
+                                CompileError::new(
+                                    file_info,
+                                    buffer.1 + id.len(),
+                                    ErrorType::InvalidState(state.to_string()),
+                                )
+                            })
+                    })
+                    .collect();
+                let states = crate::collect_errors(states)?;
+                BlockState::new(id.to_string(), states)
+            }
+        };
+        Ok(Self::Block(entity, block))
     }
 
-    fn parse_text(info: &FileInfo, buffer: Buffer, arguments: &[&str]) -> AResult<Self> {
-        todo!()
+    fn parse_text(
+        file_info: &FileInfo,
+        buffer: Buffer,
+        arguments: &[&str],
+        name_regex: &Regex,
+    ) -> AResult<Self> {
+        ensure!(
+            arguments.len() >= 2,
+            CompileError::new(
+                file_info,
+                buffer.1,
+                ErrorType::IncorrectArgumentCount(buffer.0.to_string(), 2, arguments.len())
+            )
+        );
+        let entity = Entity::new(arguments[0].to_string(), name_regex)
+            .map_err(|err| CompileError::new(file_info, buffer.1, err))?;
+        let text = arguments[1..].join(" ");
+        Ok(Self::Text(entity, text))
     }
 }
 

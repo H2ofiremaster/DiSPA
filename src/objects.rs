@@ -3,6 +3,7 @@ use std::{
     ops::{Add, Sub},
 };
 
+use itertools::Itertools;
 use regex::Regex;
 
 use crate::errors::{CompileErrorType as ErrorType, GenericError};
@@ -82,6 +83,31 @@ impl Scale {
 //         Self { scale, ..*self }
 //     }
 // }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockState {
+    id: String,
+    state: Vec<(String, String)>,
+}
+impl BlockState {
+    pub const fn new(id: String, state: Vec<(String, String)>) -> Self {
+        Self { id, state }
+    }
+
+    pub fn compile(&self) -> String {
+        let id = &self.id;
+        let states = self
+            .state
+            .iter()
+            .map(|(key, value)| format!("{key}:\"{value}\""))
+            .join(",");
+        if states.is_empty() {
+            format!("Name:\"{id}\"")
+        } else {
+            format!("Name:\"id\",Properties:{{{states}}}")
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity(String);
