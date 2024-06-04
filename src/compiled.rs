@@ -86,6 +86,7 @@ pub fn program(program: Program, file_name: &str, file_path: &str) -> CompiledFi
             }
             Statement::Text(entity, text_string) => Some(text(&data, entity.name(), &text_string)),
             Statement::Teleport(entity, x, y, z) => Some(teleport(&data, entity.name(), x, y, z)),
+            Statement::Raw(command, delayed) => Some(raw(&data, &command, delayed)),
         })
         .join("\n");
 
@@ -136,6 +137,17 @@ fn reset(data: &ProgramData) -> String {
     )
 }
 
+fn raw(data: &ProgramData, command: &str, delayed: bool) -> String {
+    if delayed {
+        format!(
+            "execute if score ${0}-{1} timer matches {2} run {3}",
+            data.object_name, data.animation_name, data.delay, command
+        )
+    } else {
+        command.to_string()
+    }
+}
+
 fn transformation(
     data: &ProgramData,
     entity_name: &str,
@@ -183,6 +195,7 @@ fn text(data: &ProgramData, entity_name: &str, text: &str) -> String {
         format!("data merge entity @s {{text:'{text}'}}"),
     )
 }
+
 fn teleport(data: &ProgramData, entity_name: &str, x: f32, y: f32, z: f32) -> String {
     data.execute_at_string(entity_name, format!("tp @s ~{x} ~{y} ~{z}"))
 }

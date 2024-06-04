@@ -62,9 +62,12 @@ const MINECRAFT_EXTENSION: &str = "mcfunction";
 
 fn main() -> anyhow::Result<()> {
     let config = config::read()?;
-    let files = get_folder_tree(PathBuf::from_str(&config.source_folder).unwrap());
+    let files = get_folder_tree(
+        PathBuf::from_str(&config.source_folder).expect("PathBuf::from_str is infallable."),
+    );
     let results = files.into_iter().map(|path| parse_file(&path)).collect();
-    fs::write(&config.tick_function, "")?;
+    fs::write(&config.tick_function, "")
+        .map_err(|_| GenericError::FileNotExist(config.tick_function.clone()))?;
     for result in collect_errors(results)? {
         let path: String = result
             .path

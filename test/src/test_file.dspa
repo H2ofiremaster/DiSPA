@@ -26,3 +26,5 @@ item test_item netherite_sword[minecraft:enchantment_glint_override=1]
 spawn test text_display test_text
 text test_text "This is some text"
 tp test_text 0 1 0
+/setblock 100 100 100 stone
+//setblock 100 101 100 diamond_block

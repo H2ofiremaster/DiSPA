@@ -90,9 +90,12 @@ pub enum Statement {
     Block(Entity, BlockState),
     Text(Entity, String),
     Teleport(Entity, f32, f32, f32),
+    Raw(String, bool),
     Empty,
 }
 impl Statement {
+    const RAW_COMMAND_PREFIX: char = '/';
+
     fn parse_from_file(
         file_info: &FileInfo,
         line: &[TrackedChar],
@@ -102,6 +105,17 @@ impl Statement {
         let buffer: Buffer = (buffer_string.trim(), buffer_pos);
         if buffer.0.is_empty() {
             return Ok(Self::Empty);
+        }
+        let mut chars = buffer.0.chars();
+        if Self::is_raw(chars.next()) {
+            let delayed: bool = !Self::is_raw(chars.next());
+            return Ok(Self::Raw(
+                buffer
+                    .0
+                    .trim_start_matches(Self::RAW_COMMAND_PREFIX)
+                    .to_string(),
+                delayed,
+            ));
         }
         let mut words = buffer.0.split(' ');
         let keyword = words.next().ok_or_else(|| {
@@ -131,6 +145,13 @@ impl Statement {
             Keyword::Block => Self::parse_block(data),
             Keyword::Text => Self::parse_text(data),
             Keyword::Teleport => Self::parse_teleport(data),
+        }
+    }
+
+    const fn is_raw(char: Option<char>) -> bool {
+        match char {
+            Some(c) => c == Self::RAW_COMMAND_PREFIX,
+            None => false,
         }
     }
 
@@ -400,8 +421,9 @@ impl<'a> TryFrom<&'a str> for Keyword {
 }
 
 fn get_buffer_string(line: &[TrackedChar]) -> (String, Position) {
-    let mut quoted = false;
+    let mut quoted: bool = false;
     assert_ne!(line.len(), 0);
+    let raw: bool = line[0].character == Statement::RAW_COMMAND_PREFIX;
     let pos: Position = line[0].position;
     let string: String = line
         .iter()
@@ -410,7 +432,7 @@ fn get_buffer_string(line: &[TrackedChar]) -> (String, Position) {
             if char == '"' {
                 quoted = !quoted;
             }
-            char != '#' || quoted
+            char != '#' || quoted || raw
         })
         .collect();
     (string.trim().to_string(), pos)

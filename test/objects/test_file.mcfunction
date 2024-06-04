@@ -9,6 +9,8 @@ execute as @e[tag=test_obj,tag=test_item] if score $test_obj-test_anim timer mat
 execute as @e[tag=test_obj,tag=test] at @s if score $test_obj-test_anim timer matches 40 run summon text_display ~ ~ ~ {Tags:["test_obj","test_text"]}
 execute as @e[tag=test_obj,tag=test_text] if score $test_obj-test_anim timer matches 40 run data merge entity @s {text:'"This is some text"'}
 execute as @e[tag=test_obj,tag=test_text] at @s if score $test_obj-test_anim timer matches 40 run tp @s ~0 ~1 ~0
+execute if score $test_obj-test_anim timer matches 40 run setblock 100 100 100 stone
+setblock 100 101 100 diamond_block
 
 execute if score $test_obj-test_anim timer matches 40.. run scoreboard players set $test_obj-test_anim flags 0
 execute if score $test_obj-test_anim timer matches 40.. run scoreboard players set $test_obj-test_anim timer -1
