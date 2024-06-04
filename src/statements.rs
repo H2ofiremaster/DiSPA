@@ -167,20 +167,16 @@ impl Statement {
     }
 
     fn parse_translation(data: StatementData) -> AResult<Self> {
-        let StatementData {
-            file_info: _,
-            buffer,
-            arguments,
-            name_regex,
-        } = data;
+        let arguments = data.arguments;
+        let name_regex = data.name_regex;
         arg_count!(== 5, data);
         let entity =
             Entity::new(arguments[0], name_regex).map_err(|err| data.compile_error(err))?;
-        let duration: u32 = arguments[1]
-            .parse()
-            .map_err(|err| data.compile_error(ErrorType::InvalidInt(buffer.0, err)))?;
-        let position: Vector = Self::parse_coordinates(arguments[2], arguments[3], arguments[4])
+        let position: Vector = Self::parse_coordinates(arguments[1], arguments[2], arguments[3])
             .map_err(|err| data.compile_error(err))?;
+        let duration: u32 = arguments[4]
+            .parse()
+            .map_err(|err| data.compile_error(ErrorType::InvalidInt(arguments[4], err)))?;
         let translation = Translation::new(position);
         Ok(Self::Translate(entity, translation, duration))
     }
@@ -192,37 +188,34 @@ impl Statement {
         let entity =
             Entity::new(arguments[0], name_regex).map_err(|err| data.compile_error(err))?;
 
-        let duration: u32 = arguments[1]
-            .parse()
-            .map_err(|err| data.compile_error(ErrorType::InvalidInt(arguments[1], err)))?;
-
         let axis: [f32; 3] =
-            Self::parse_axis(arguments[2]).map_err(|err| data.compile_error(err))?;
-        let angle: f32 = arguments[3]
+            Self::parse_axis(arguments[1]).map_err(|err| data.compile_error(err))?;
+        let angle: f32 = arguments[2]
             .parse()
-            .map_err(|err| data.compile_error(ErrorType::InvalidFloat(arguments[3], err)))?;
+            .map_err(|err| data.compile_error(ErrorType::InvalidFloat(arguments[2], err)))?;
+
+        let duration: u32 = arguments[3]
+            .parse()
+            .map_err(|err| data.compile_error(ErrorType::InvalidInt(arguments[3], err)))?;
 
         let rotation = Rotation::new(axis, angle);
         Ok(Self::Rotate(entity, rotation, duration))
     }
 
     fn parse_scale(data: StatementData) -> AResult<Self> {
-        let StatementData {
-            file_info: _,
-            buffer,
-            arguments,
-            name_regex,
-        } = data;
+        let arguments = data.arguments;
+        let name_regex = data.name_regex;
         arg_count!(== 5, data);
+
         let entity =
             Entity::new(arguments[0], name_regex).map_err(|err| data.compile_error(err))?;
 
-        let duration: u32 = arguments[1]
-            .parse()
-            .map_err(|err| data.compile_error(ErrorType::InvalidInt(buffer.0, err)))?;
-
-        let position: Vector = Self::parse_coordinates(arguments[2], arguments[3], arguments[4])
+        let position: Vector = Self::parse_coordinates(arguments[1], arguments[2], arguments[3])
             .map_err(|err| data.compile_error(err))?;
+
+        let duration: u32 = arguments[4]
+            .parse()
+            .map_err(|err| data.compile_error(ErrorType::InvalidInt(arguments[4], err)))?;
 
         let scale = Scale::new(position);
         Ok(Self::Scale(entity, scale, duration))

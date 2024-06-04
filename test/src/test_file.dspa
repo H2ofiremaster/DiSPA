@@ -15,9 +15,9 @@
 # tp <entity> <x> <y> <z>
 object test_obj:test_anim
 
-move test 20 0 1 0
-turn test 20 y 90
-size test 20 2 2 2
+move test 0 1 0 20
+turn test y 90 20
+size test 2 2 2 20
 wait 40
 spawn test block_display test_block
 block test_block oak_slab[type=top,waterlogged=false]
